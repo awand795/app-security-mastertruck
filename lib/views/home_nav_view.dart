@@ -30,17 +30,31 @@ class _HomeNavViewState extends State<HomeNavView> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Konfirmasi Logout', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-        content: Text('Keluar dari sesi petugas security?', style: GoogleFonts.plusJakartaSans(fontSize: 13)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout, color: AppTheme.errorRed, size: 22),
+            const SizedBox(width: 8),
+            Text('Konfirmasi Logout', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Keluar dari sesi petugas security pos gerbang?',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppTheme.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
+            child: Text('Batal', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorRed,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Keluar'),
+            child: Text('Keluar', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
           ),
         ],
       ),
@@ -59,7 +73,7 @@ class _HomeNavViewState extends State<HomeNavView> {
   @override
   Widget build(BuildContext context) {
     final session = AuthService.currentSession;
-    final officerName = session?.name ?? 'Petugas';
+    final officerName = session?.name ?? 'Petugas Security';
 
     final views = [
       const CheckInView(),
@@ -78,69 +92,127 @@ class _HomeNavViewState extends State<HomeNavView> {
       'Histori Keluar Hari Ini',
     ];
 
+    final isTablet = MediaQuery.of(context).size.width >= 720;
+
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
+        elevation: 0.5,
+        backgroundColor: AppTheme.surfaceWhite,
+        titleSpacing: 12,
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.corporateNavy,
-                borderRadius: BorderRadius.circular(8),
+            // Official Master Truck Logo
+            Image.asset(
+              'assets/images/master-truck-logo-transparent.png',
+              height: 34,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.corporateNavy,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.shield, color: AppTheme.amberGold, size: 20),
               ),
-              child: const Icon(Icons.shield, color: AppTheme.amberGold, size: 18),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titles[_currentIndex],
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: AppTheme.textPrimary,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          titles[_currentIndex],
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            fontSize: isTablet ? 17 : 14,
+                            color: AppTheme.corporateNavy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.corporateNavy.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.corporateNavy.withOpacity(0.2)),
+                        ),
+                        child: Text(
+                          'KIM 3',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 9,
+                            color: AppTheme.corporateNavy,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  'MASTER TRUCK GATE',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 10,
-                    color: AppTheme.amberGold,
-                    letterSpacing: 0.8,
+                  Text(
+                    'SECURITY GATE PORTAL',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 9,
+                      color: AppTheme.amberGold,
+                      letterSpacing: 1.0,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
         actions: [
+          // Security Officer Badge
           Container(
-            margin: const EdgeInsets.only(right: 8),
+            margin: const EdgeInsets.symmetric(vertical: 8),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.backgroundLight,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppTheme.cardBorder),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.person, size: 14, color: AppTheme.corporateNavy),
-                const SizedBox(width: 5),
-                Text(
-                  officerName,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.corporateNavy,
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: AppTheme.corporateNavy,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/avatar-bambang.png',
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 14, color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: isTablet ? 140 : 85),
+                  child: Text(
+                    officerName,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.corporateNavy,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.logout, size: 20, color: AppTheme.errorRed),
+            icon: const Icon(Icons.logout_rounded, size: 20, color: AppTheme.textSecondary),
             tooltip: 'Logout',
             onPressed: _handleLogout,
           ),
@@ -157,14 +229,16 @@ class _HomeNavViewState extends State<HomeNavView> {
           border: const Border(top: BorderSide(color: AppTheme.cardBorder, width: 1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, -3),
             ),
           ],
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
+          height: 64,
+          elevation: 0,
           onDestinationSelected: (idx) {
             setState(() {
               _currentIndex = idx;
@@ -172,27 +246,27 @@ class _HomeNavViewState extends State<HomeNavView> {
             });
           },
           backgroundColor: Colors.transparent,
-          indicatorColor: AppTheme.corporateNavy.withOpacity(0.1),
+          indicatorColor: AppTheme.corporateNavy.withOpacity(0.08),
           destinations: const [
             NavigationDestination(
-              icon: Icon(Icons.login_outlined),
-              selectedIcon: Icon(Icons.login, color: AppTheme.corporateNavy),
+              icon: Icon(Icons.login_rounded, size: 22),
+              selectedIcon: Icon(Icons.login_rounded, color: AppTheme.corporateNavy, size: 24),
               label: 'Check-In',
             ),
             NavigationDestination(
-              icon: Icon(Icons.garage_outlined),
-              selectedIcon: Icon(Icons.garage, color: AppTheme.corporateNavy),
+              icon: Icon(Icons.local_shipping_outlined, size: 22),
+              selectedIcon: Icon(Icons.local_shipping_rounded, color: AppTheme.corporateNavy, size: 24),
               label: 'Di Dalam',
             ),
             NavigationDestination(
-              icon: Icon(Icons.exit_to_app_outlined),
-              selectedIcon: Icon(Icons.exit_to_app, color: AppTheme.corporateNavy),
+              icon: Icon(Icons.logout_rounded, size: 22),
+              selectedIcon: Icon(Icons.logout_rounded, color: AppTheme.corporateNavy, size: 24),
               label: 'Check-Out',
             ),
             NavigationDestination(
-              icon: Icon(Icons.history_outlined),
-              selectedIcon: Icon(Icons.history, color: AppTheme.corporateNavy),
-              label: 'Hari Ini',
+              icon: Icon(Icons.receipt_long_outlined, size: 22),
+              selectedIcon: Icon(Icons.receipt_long_rounded, color: AppTheme.corporateNavy, size: 24),
+              label: 'Histori Keluar',
             ),
           ],
         ),

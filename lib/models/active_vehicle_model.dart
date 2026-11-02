@@ -1,5 +1,6 @@
 class ActiveVehicle {
   final int id;
+  final String? nomorTiket;
   final String noPolisi;
   final String? namaPengemudi;
   final String? noTeleponPengemudi;
@@ -17,6 +18,7 @@ class ActiveVehicle {
 
   ActiveVehicle({
     required this.id,
+    this.nomorTiket,
     required this.noPolisi,
     this.namaPengemudi,
     this.noTeleponPengemudi,
@@ -48,6 +50,7 @@ class ActiveVehicle {
 
     return ActiveVehicle(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      nomorTiket: json['nomor_tiket']?.toString() ?? json['ticket_no']?.toString(),
       noPolisi: (json['no_polisi'] ?? json['nopol'] ?? '').toString().toUpperCase(),
       namaPengemudi: json['nama_pengemudi']?.toString(),
       noTeleponPengemudi: json['no_telepon_pengemudi']?.toString(),
@@ -59,9 +62,9 @@ class ActiveVehicle {
       nomorSpk: json['nomor_spk']?.toString(),
       nomorInvoice: json['nomor_invoice']?.toString(),
       waktuCheckIn: checkInDate,
-      petugasSecurity: (json['petugas_security'] ?? json['petugas_masuk'])?.toString(),
+      petugasSecurity: (json['petugas_security_masuk'] ?? json['petugas_security'])?.toString(),
       jenisKedatangan: json['jenis_kedatangan']?.toString(),
-      namaPelanggan: json['nama_pelanggan']?.toString(),
+      namaPelanggan: json['nama_pelanggan']?.toString() ?? json['customer_name']?.toString(),
     );
   }
 }

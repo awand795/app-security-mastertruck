@@ -23,7 +23,7 @@ class _LoginViewState extends State<LoginView> {
     final password = _passwordController.text;
 
     if (userId.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = 'Mohon isi User ID dan Password.');
+      setState(() => _errorMessage = 'Mohon masukkan User ID dan Password.');
       return;
     }
 
@@ -43,7 +43,7 @@ class _LoginViewState extends State<LoginView> {
         MaterialPageRoute(builder: (_) => const HomeNavView()),
       );
     } else {
-      setState(() => _errorMessage = res['message'] ?? 'Login gagal.');
+      setState(() => _errorMessage = res['message'] ?? 'Login gagal. Periksa User ID / Password.');
     }
   }
 
@@ -54,153 +54,156 @@ class _LoginViewState extends State<LoginView> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Brand Emblem Header
-                Center(
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppTheme.corporateNavy,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.corporateNavy.withOpacity(0.25),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.shield_outlined, color: AppTheme.amberGold, size: 38),
-                  ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: const BorderSide(color: AppTheme.cardBorder, width: 1),
                 ),
-                const SizedBox(height: 20),
-
-                // Title
-                Text(
-                  'MASTER TRUCK',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                    color: AppTheme.corporateNavy,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Pos Security Gate & Pemeriksaan Kendaraan',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 36),
-
-                // Error Message Box
-                if (_errorMessage != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.errorLight,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.errorRed.withOpacity(0.4)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.errorRed, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppTheme.errorRed,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                color: AppTheme.surfaceWhite,
+                child: Padding(
+                  padding: const EdgeInsets.all(28.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Official Master Truck Logo
+                      Center(
+                        child: Image.asset(
+                          'assets/images/master-truck-logo-transparent.png',
+                          height: 72,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              color: AppTheme.corporateNavy,
+                              borderRadius: BorderRadius.circular(16),
                             ),
+                            child: const Icon(Icons.shield, color: AppTheme.amberGold, size: 36),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // Form Card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceWhite,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.cardBorder),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                      const SizedBox(height: 16),
+
                       Text(
-                        'Login Petugas Security',
+                        'MASTER TRUCK',
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.5,
+                          color: AppTheme.corporateNavy,
                         ),
                       ),
-                      const SizedBox(height: 18),
-
-                      // User ID Input
+                      const SizedBox(height: 4),
                       Text(
-                        'User ID',
+                        'Pos Security Gate & Kontrol Armada',
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Error message banner
+                      if (_errorMessage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.errorRed.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.errorRed.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: AppTheme.errorRed, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.errorRed,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Form Fields
+                      Text(
+                        'User ID Petugas',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.corporateNavy,
                         ),
                       ),
                       const SizedBox(height: 6),
                       TextField(
                         controller: _userIdController,
-                        decoration: const InputDecoration(
-                          hintText: 'Masukkan ID Petugas',
-                          prefixIcon: Icon(Icons.badge_outlined, color: AppTheme.textMuted, size: 20),
+                        decoration: InputDecoration(
+                          hintText: 'Contoh: SEC001 / bambang',
+                          prefixIcon: const Icon(Icons.badge_outlined, size: 20, color: AppTheme.corporateNavy),
+                          filled: true,
+                          fillColor: AppTheme.backgroundLight,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.cardBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.cardBorder),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
 
-                      // Password Input
                       Text(
                         'Password',
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.corporateNavy,
                         ),
                       ),
                       const SizedBox(height: 6),
                       TextField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
+                        onSubmitted: (_) => _handleLogin(),
                         decoration: InputDecoration(
-                          hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_outline, color: AppTheme.textMuted, size: 20),
+                          hintText: 'Masukkan password',
+                          prefixIcon: const Icon(Icons.lock_outline, size: 20, color: AppTheme.corporateNavy),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                              color: AppTheme.textMuted,
+                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                               size: 20,
+                              color: AppTheme.textSecondary,
                             ),
                             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                          filled: true,
+                          fillColor: AppTheme.backgroundLight,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.cardBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.cardBorder),
                           ),
                         ),
                       ),
@@ -208,19 +211,22 @@ class _LoginViewState extends State<LoginView> {
 
                       // Submit Button
                       SizedBox(
-                        width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.corporateNavy,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: _isLoading
                               ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                 )
                               : Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -228,7 +234,7 @@ class _LoginViewState extends State<LoginView> {
                                     const Icon(Icons.login, size: 18),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Masuk ke Sistem',
+                                      'Masuk ke Sistem Gate',
                                       style: GoogleFonts.plusJakartaSans(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w700,
@@ -238,21 +244,22 @@ class _LoginViewState extends State<LoginView> {
                                 ),
                         ),
                       ),
+
+                      const SizedBox(height: 20),
+                      Center(
+                        child: Text(
+                          'Bengkel Master Truck KIM 3 • DarkoPOS Integrated',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 24),
-                Center(
-                  child: Text(
-                    'KIM 3 • DarkoPOS Integrated System',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

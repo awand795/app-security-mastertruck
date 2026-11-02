@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../models/active_vehicle_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/photo_quad_picker.dart';
 import '../widgets/gate_pass_dialog.dart';
@@ -31,9 +33,16 @@ class _CheckOutViewState extends State<CheckOutView> {
   void initState() {
     super.initState();
     if (widget.initialPlate != null && widget.initialPlate!.isNotEmpty) {
-      _nopolController.text = widget.initialPlate!;
+      _nopolController.text = formatPlate(widget.initialPlate!);
       _lookupVehicle(widget.initialPlate!);
     }
+  }
+
+  @override
+  void dispose() {
+    _nopolController.dispose();
+    _notesController.dispose();
+    super.dispose();
   }
 
   void _openAnprScanner() {
@@ -43,15 +52,16 @@ class _CheckOutViewState extends State<CheckOutView> {
       backgroundColor: Colors.transparent,
       builder: (_) => AnprScannerSheet(
         onPlateDetected: (plate) {
-          setState(() => _nopolController.text = plate);
-          _lookupVehicle(plate);
+          final formatted = formatPlate(plate);
+          setState(() => _nopolController.text = formatted);
+          _lookupVehicle(formatted);
         },
       ),
     );
   }
 
   Future<void> _lookupVehicle(String nopol) async {
-    final clean = nopol.replaceAll(' ', '').trim().toUpperCase();
+    final clean = normalizePlate(nopol);
     if (clean.isEmpty) return;
 
     setState(() {
@@ -64,7 +74,7 @@ class _CheckOutViewState extends State<CheckOutView> {
 
     ActiveVehicle? found;
     for (final v in list) {
-      if (v.noPolisi.replaceAll(' ', '') == clean) {
+      if (normalizePlate(v.noPolisi) == clean) {
         found = v;
         break;
       }
@@ -77,7 +87,13 @@ class _CheckOutViewState extends State<CheckOutView> {
 
     if (_selectedVehicle == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kendaraan tidak ditemukan di dalam bengkel.')),
+        SnackBar(
+          content: Text(
+            'Kendaraan $nopol tidak ditemukan di dalam bengkel.',
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: AppTheme.corporateNavy,
+        ),
       );
     }
   }
@@ -94,10 +110,20 @@ class _CheckOutViewState extends State<CheckOutView> {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: Text('Peringatan Status Pembayaran', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppTheme.amberGold, size: 26),
+              const SizedBox(width: 8),
+              Text(
+                'Perhatian Invoice',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
           content: Text(
-            'Invoice servis kendaraan ini belum berstatus LUNAS (${_selectedVehicle!.statusInvoice ?? 'Belum Lunas'}). Lanjutkan checkout gerbang?',
-            style: GoogleFonts.plusJakartaSans(fontSize: 13),
+            'Invoice servis kendaraan ini belum berstatus LUNAS (${_selectedVehicle!.statusInvoice ?? 'Belum Lunas'}).\n\nTetap izinkan kendaraan keluar gerbang?',
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
           ),
           actions: [
             TextButton(
@@ -105,9 +131,12 @@ class _CheckOutViewState extends State<CheckOutView> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.amberGold,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Tetap Keluarkan'),
+              child: const Text('Izinkan Keluar'),
             ),
           ],
         ),
@@ -118,7 +147,7 @@ class _CheckOutViewState extends State<CheckOutView> {
 
     setState(() => _isSubmitting = true);
 
-    final petugas = AuthService.currentSession?.name ?? 'Security Gate';
+    final petugas = AuthService.currentSession?.name ?? 'Pos Security KIM 3';
     final res = await ApiService.postCheckOut(
       kunjunganId: _selectedVehicle!.id,
       petugasSecurityKeluar: petugas,
@@ -143,18 +172,22 @@ class _CheckOutViewState extends State<CheckOutView> {
       }
 
       // Dialog Gate Pass Keluar
-      await showDialog(
+      showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (_) => GatePassDialog(
-          title: 'Gate Pass / Memo Keluar Digital',
-          codeNumber: nomorMemo,
-          nopol: _selectedVehicle!.noPolisi,
-          driverName: _selectedVehicle!.namaPengemudi,
-          customerName: _selectedVehicle!.namaPelanggan,
-          spkNumber: _selectedVehicle!.nomorSpk,
-          invoiceNumber: _selectedVehicle!.nomorInvoice,
-          dateTime: DateTime.now(),
-          isExit: true,
+          nomorTiket: _selectedVehicle!.nomorTiket ?? 'TKT-KIM3',
+          noPolisi: formatPlate(_selectedVehicle!.noPolisi),
+          namaPengemudi: _selectedVehicle!.namaPengemudi ?? '-',
+          tipeKunjungan: _selectedVehicle!.tipeKunjungan ?? 'Service',
+          keluhan: _selectedVehicle!.keluhan ?? 'Pengecekan armada',
+          waktuMasuk: _selectedVehicle!.waktuCheckIn != null
+              ? DateFormat('HH:mm').format(_selectedVehicle!.waktuCheckIn!)
+              : '-',
+          waktuKeluar: DateFormat('HH:mm').format(DateTime.now()),
+          nomorMemo: nomorMemo,
+          petugasSecurity: petugas,
+          onClose: () {},
         ),
       );
 
@@ -178,214 +211,333 @@ class _CheckOutViewState extends State<CheckOutView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Search / Scan Bar
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceWhite,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.cardBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nomor Polisi Kendaraan Keluar',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _nopolController,
-                          textCapitalization: TextCapitalization.characters,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            letterSpacing: 1.2,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'CONTOH: B 1234 WLG',
-                            prefixIcon: Icon(Icons.pin, color: AppTheme.textMuted),
-                          ),
-                          onSubmitted: _lookupVehicle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        style: IconButton.styleFrom(backgroundColor: AppTheme.corporateNavy),
-                        icon: const Icon(Icons.search, color: Colors.white),
-                        onPressed: () => _lookupVehicle(_nopolController.text),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.camera_alt, color: AppTheme.corporateNavy),
-                        onPressed: _openAnprScanner,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Detail Card if vehicle found
-            if (_isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(color: AppTheme.corporateNavy),
-                ),
-              )
-            else if (_selectedVehicle != null) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Card 1: Nomor Polisi Kendaraan Keluar
+                Card(
+                  elevation: 0,
                   color: AppTheme.surfaceWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _selectedVehicle!.isSiapKeluar ? AppTheme.successGreen : AppTheme.errorRed,
-                    width: 1.5,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: const BorderSide(color: AppTheme.cardBorder, width: 1),
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.navyDark,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _selectedVehicle!.noPolisi,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: _selectedVehicle!.isSiapKeluar
-                                ? AppTheme.successLight
-                                : AppTheme.errorLight,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _selectedVehicle!.isSiapKeluar ? 'INVOICE LUNAS' : 'BELUM LUNAS',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: _selectedVehicle!.isSiapKeluar
-                                  ? AppTheme.successGreen
-                                  : AppTheme.errorRed,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    _itemDetail('Pengemudi', _selectedVehicle!.namaPengemudi ?? '-'),
-                    _itemDetail('Customer / Pemilik', _selectedVehicle!.namaPelanggan ?? '-'),
-                    _itemDetail('No. SPK', _selectedVehicle!.nomorSpk ?? '-'),
-                    _itemDetail('Status Servis', _selectedVehicle!.statusServis ?? '-'),
-                    _itemDetail('No. Invoice', _selectedVehicle!.nomorInvoice ?? '-'),
-
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _notesController,
-                      decoration: const InputDecoration(
-                        labelText: 'Catatan Keluar (Opsional)',
-                        hintText: 'Contoh: Muatan kosong, kondisi unit baik',
-                        prefixIcon: Icon(Icons.note_alt_outlined, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Foto Keluar 4 Sudut
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceWhite,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.cardBorder),
-                ),
-                child: PhotoQuadPicker(
-                  photos: _exitPhotos,
-                  onPhotoCaptured: (angle, b64) {
-                    setState(() => _exitPhotos[angle] = b64);
-                  },
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Submit Checkout Button
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _handleCheckOut,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _selectedVehicle!.isSiapKeluar
-                        ? AppTheme.corporateNavy
-                        : AppTheme.errorRed,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: _isSubmitting
-                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2)
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Row(
                           children: [
-                            const Icon(Icons.exit_to_app, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Konfirmasi Check-Out & Buka Gerbang',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.corporateNavy,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.exit_to_app_rounded, color: AppTheme.amberGold, size: 20),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Pemeriksaan Kendaraan Keluar',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: AppTheme.corporateNavy,
+                                  ),
+                                ),
+                                Text(
+                                  'Validasi invoice & terbitkan Gate Pass',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Input Plat Nomor
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.backgroundLight,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppTheme.cardBorder, width: 1.5),
+                          ),
+                          child: TextField(
+                            controller: _nopolController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [PlateInputFormatter()],
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.chivo(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 3.0,
+                              color: AppTheme.corporateNavy,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'B 2156 TQR',
+                              hintStyle: GoogleFonts.chivo(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 3.0,
+                                color: Colors.grey.shade400,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              suffixIcon: _nopolController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.cancel_rounded, color: AppTheme.textMuted, size: 22),
+                                      onPressed: () {
+                                        _nopolController.clear();
+                                        setState(() => _selectedVehicle = null);
+                                      },
+                                    )
+                                  : null,
+                            ),
+                            onSubmitted: _lookupVehicle,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: OutlinedButton.icon(
+                                onPressed: _openAnprScanner,
+                                icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                                label: Text(
+                                  'Scan Kamera',
+                                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.corporateNavy,
+                                  side: const BorderSide(color: AppTheme.corporateNavy, width: 1.2),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 6,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _lookupVehicle(_nopolController.text),
+                                icon: const Icon(Icons.search_rounded, size: 18),
+                                label: Text(
+                                  'Cari Kendaraan',
+                                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.corporateNavy,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
                               ),
                             ),
                           ],
                         ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _itemDetail(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: GoogleFonts.plusJakartaSans(color: AppTheme.textSecondary, fontSize: 12)),
-          Text(value, style: GoogleFonts.plusJakartaSans(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12)),
-        ],
+                const SizedBox(height: 16),
+
+                // Detail Card if vehicle found
+                if (_isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(color: AppTheme.corporateNavy),
+                    ),
+                  )
+                else if (_selectedVehicle != null) ...[
+                  Card(
+                    elevation: 0,
+                    color: AppTheme.surfaceWhite,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(
+                        color: _selectedVehicle!.isSiapKeluar ? AppTheme.successGreen : AppTheme.amberGold,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    formatPlate(_selectedVehicle!.noPolisi),
+                                    style: GoogleFonts.chivo(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.corporateNavy,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Tiket: ${_selectedVehicle!.nomorTiket ?? '-'}',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _selectedVehicle!.isSiapKeluar ? AppTheme.successLight : AppTheme.amberLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _selectedVehicle!.isSiapKeluar ? 'LUNAS • SIAP KELUAR' : 'BELUM LUNAS',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                    color: _selectedVehicle!.isSiapKeluar ? AppTheme.successGreen : AppTheme.amberGold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+
+                          // Driver & SPK Details
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Pengemudi', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppTheme.textMuted)),
+                                    Text(
+                                      _selectedVehicle!.namaPengemudi ?? '-',
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Pelanggan / Armada', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppTheme.textMuted)),
+                                    Text(
+                                      _selectedVehicle!.namaPelanggan ?? '-',
+                                      style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          Text('Keluhan Awal', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppTheme.textMuted)),
+                          Text(
+                            (_selectedVehicle!.keluhan != null && _selectedVehicle!.keluhan!.isNotEmpty) ? _selectedVehicle!.keluhan! : '-',
+                            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppTheme.textPrimary),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Notes
+                          Text(
+                            'Catatan Keluar (Opsional)',
+                            style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _notesController,
+                            decoration: InputDecoration(
+                              hintText: 'Keterangan kondisi saat keluar gerbang...',
+                              filled: true,
+                              fillColor: AppTheme.backgroundLight,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Exit Photos
+                  Card(
+                    elevation: 0,
+                    color: AppTheme.surfaceWhite,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: const BorderSide(color: AppTheme.cardBorder, width: 1),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: PhotoQuadPicker(
+                        photos: _exitPhotos,
+                        onPhotoCaptured: (angle, b64) => setState(() => _exitPhotos[angle] = b64),
+                        onPhotoRemoved: (angle) => setState(() => _exitPhotos.remove(angle)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Checkout Action Button
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _handleCheckOut,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectedVehicle!.isSiapKeluar ? AppTheme.successGreen : AppTheme.corporateNavy,
+                        foregroundColor: Colors.white,
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.check_circle_outline, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Selesai & Terbitkan Memo Keluar (Gate Pass)',
+                                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
