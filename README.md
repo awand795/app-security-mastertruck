@@ -1,4 +1,4 @@
-# Aplikasi Mobile Security Master Truck (Flutter Native Android)
+# MasterTruck Security (Flutter Native Android)
 
 [![Release](https://img.shields.io/github/v/release/awand795/app-security-mastertruck?label=Download%20APK&color=0A2540)](https://github.com/awand795/app-security-mastertruck/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter)](https://flutter.dev)
@@ -7,7 +7,7 @@
 Aplikasi mobile Android native untuk Pos Security Gerbang Bengkel Master Truck KIM 3.  
 Dibangun menggunakan **Flutter 3.47** dengan arsitektur Material 3 modern (**Clean Light Corporate: Pure White + Deep Navy + Amber Gold**).
 
-📥 **[Unduh File APK Release Terbaru (v1.1.0)](https://github.com/awand795/app-security-mastertruck/releases/latest/download/app-release.apk)**
+📥 **[Unduh File APK Release Terbaru (v1.2.0)](https://github.com/awand795/app-security-mastertruck/releases/latest/download/app-release.apk)**
 
 ---
 
