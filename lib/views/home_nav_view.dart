@@ -73,7 +73,7 @@ class _HomeNavViewState extends State<HomeNavView> {
   @override
   Widget build(BuildContext context) {
     final session = AuthService.currentSession;
-    final officerName = session?.name ?? 'Petugas Security';
+    final officerName = session?.name ?? 'Petugas';
 
     final views = [
       const CheckInView(),
@@ -92,31 +92,29 @@ class _HomeNavViewState extends State<HomeNavView> {
       'Histori Keluar Hari Ini',
     ];
 
-    final isTablet = MediaQuery.of(context).size.width >= 720;
-
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
         elevation: 0.5,
         backgroundColor: AppTheme.surfaceWhite,
-        titleSpacing: 12,
+        titleSpacing: 14,
         title: Row(
           children: [
-            // Official Master Truck Logo
-            Image.asset(
-              'assets/images/master-truck-logo-transparent.png',
-              height: 34,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppTheme.corporateNavy,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.shield, color: AppTheme.amberGold, size: 20),
+            // Master Truck Official Logo
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.corporateNavy,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Image.asset(
+                'assets/images/master-truck-logo.png',
+                height: 24,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: AppTheme.amberGold, size: 20),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,42 +124,41 @@ class _HomeNavViewState extends State<HomeNavView> {
                     children: [
                       Flexible(
                         child: Text(
-                          titles[_currentIndex],
+                          'MasterTruck',
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            fontSize: isTablet ? 17 : 14,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
                             color: AppTheme.corporateNavy,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: AppTheme.corporateNavy.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.corporateNavy.withOpacity(0.2)),
+                          color: AppTheme.amberGold.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           'KIM 3',
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w800,
                             fontSize: 9,
-                            color: AppTheme.corporateNavy,
-                            letterSpacing: 0.5,
+                            color: const Color(0xFFB45309),
                           ),
                         ),
                       ),
                     ],
                   ),
                   Text(
-                    'SECURITY GATE PORTAL',
+                    titles[_currentIndex],
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 9,
-                      color: AppTheme.amberGold,
-                      letterSpacing: 1.0,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
@@ -173,36 +170,36 @@ class _HomeNavViewState extends State<HomeNavView> {
           // Security Officer Badge
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.backgroundLight,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppTheme.cardBorder),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 CircleAvatar(
-                  radius: 12,
+                  radius: 11,
                   backgroundColor: AppTheme.corporateNavy,
                   child: ClipOval(
                     child: Image.asset(
                       'assets/images/avatar-bambang.png',
-                      width: 24,
-                      height: 24,
+                      width: 22,
+                      height: 22,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 14, color: Colors.white),
+                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 12, color: Colors.white),
                     ),
                   ),
                 ),
                 const SizedBox(width: 6),
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: isTablet ? 140 : 85),
+                  constraints: const BoxConstraints(maxWidth: 75),
                   child: Text(
                     officerName,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.corporateNavy,
                     ),

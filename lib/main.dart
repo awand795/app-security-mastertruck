@@ -30,7 +30,7 @@ class SecurityMasterTruckApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Security Master Truck',
+      title: 'MasterTruck Security',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: AuthService.isAuthenticated ? const HomeNavView() : const LoginView(),

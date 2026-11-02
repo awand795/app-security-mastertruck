@@ -613,57 +613,159 @@ class _CheckInViewState extends State<CheckInView> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Action Bar di bawah input plat: Tombol Scan Kamera & Tombol Cek Plat
+                      // Quick Action Buttons: Scan Kamera AI & Cek Plat Booking
                       Row(
                         children: [
-                          // Tombol Scan Kamera Plat (AI ANPR)
+                          // 1. Scan Kamera AI ANPR Card Button
                           Expanded(
-                            flex: 5,
-                            child: OutlinedButton.icon(
-                              onPressed: _openAnprScanner,
-                              icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                              label: Text(
-                                'Scan Kamera Plat',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _openAnprScanner,
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.corporateNavy.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: AppTheme.corporateNavy.withOpacity(0.2),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.corporateNavy,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Icon(
+                                          Icons.document_scanner_rounded,
+                                          color: AppTheme.amberGold,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              'Scan Plat',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12,
+                                                color: AppTheme.corporateNavy,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Deteksi AI Instan',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 9.5,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.corporateNavy,
-                                side: const BorderSide(color: AppTheme.corporateNavy, width: 1.2),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ),
                           const SizedBox(width: 10),
 
-                          // Tombol Cek Plat & Data Booking
+                          // 2. Cek Plat / Booking Database Button
                           Expanded(
-                            flex: 6,
-                            child: ElevatedButton.icon(
-                              onPressed: _isSearchingPlate ? null : () => _executePlateSearch(),
-                              icon: _isSearchingPlate
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Icon(Icons.search_rounded, size: 18),
-                              label: Text(
-                                _isSearchingPlate ? 'Memeriksa...' : 'Cek Plat / Booking',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _isSearchingPlate ? null : () => _executePlateSearch(),
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF0A2540),
+                                        Color(0xFF1E3A8A),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF0A2540).withOpacity(0.2),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.16),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: _isSearchingPlate
+                                            ? const SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppTheme.amberGold,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.search_rounded,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _isSearchingPlate ? 'Memeriksa...' : 'Cek Plat',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Verifikasi Booking',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 9.5,
+                                                color: Colors.white.withOpacity(0.8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.corporateNavy,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ),
