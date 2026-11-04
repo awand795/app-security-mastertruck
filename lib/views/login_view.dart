@@ -23,7 +23,7 @@ class _LoginViewState extends State<LoginView> {
     final password = _passwordController.text;
 
     if (userId.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = 'Mohon masukkan User ID dan Password.');
+      setState(() => _errorMessage = 'Mohon masukkan User ID dan Kata Sandi.');
       return;
     }
 
@@ -43,7 +43,7 @@ class _LoginViewState extends State<LoginView> {
         MaterialPageRoute(builder: (_) => const HomeNavView()),
       );
     } else {
-      setState(() => _errorMessage = res['message'] ?? 'Login gagal. Periksa User ID / Password.');
+      setState(() => _errorMessage = res['message'] ?? 'User ID atau kata sandi yang Anda masukkan tidak sesuai. Silakan periksa kembali dan coba lagi.');
     }
   }
 

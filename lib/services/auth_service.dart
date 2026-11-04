@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,12 +66,12 @@ class AuthService {
   static Future<Map<String, dynamic>> login({
     required String userId,
     required String password,
-    String company = '',
+    String company = 'LPM',
   }) async {
     final url = Uri.parse('${ApiConfig.darkoPosBaseUrl}/api/v1/users/login');
 
     try {
-      final res = await http.post(
+      var res = await http.post(
         url,
         headers: {
           'Content-Type': 'application/json',
@@ -83,9 +84,69 @@ class AuthService {
         }),
       ).timeout(const Duration(seconds: 10));
 
-      final data = jsonDecode(res.body);
+      // Jika 401 dan company terisi, coba fallback tanpa company persis seperti di portal web
+      if (res.statusCode == 401 && company.isNotEmpty) {
+        res = await http.post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ApiConfig.darkoPosApiKey,
+          },
+          body: jsonEncode({
+            'userid': userId,
+            'password': password,
+            'company': '',
+          }),
+        ).timeout(const Duration(seconds: 10));
+      }
 
-      if (res.statusCode == 200 && (data['token'] != null || data['idToken'] != null || data['success'] == true)) {
+      // Bila respons 401 Unauthorized, jangan lakukan jsonDecode dan jangan tampilkan exception teknis
+      if (res.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'User ID atau kata sandi yang Anda masukkan tidak sesuai. Silakan periksa kembali dan coba lagi.',
+        };
+      }
+
+      if (res.statusCode == 403) {
+        return {
+          'success': false,
+          'message': 'Akun Anda tidak memiliki izin akses ke portal keamanan gerbang.',
+        };
+      }
+
+      if (res.statusCode == 404) {
+        return {
+          'success': false,
+          'message': 'Layanan autentikasi POS sedang tidak tersedia. Silakan hubungi tim administrator bengkel.',
+        };
+      }
+
+      if (res.statusCode >= 500) {
+        return {
+          'success': false,
+          'message': 'Terjadi kendala pada server sistem POS. Silakan coba kembali beberapa saat lagi.',
+        };
+      }
+
+      if (res.statusCode != 200) {
+        return {
+          'success': false,
+          'message': 'Gagal masuk ke sistem. Silakan periksa kembali data akun Anda atau coba beberapa saat lagi.',
+        };
+      }
+
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {
+        return {
+          'success': false,
+          'message': 'User ID atau kata sandi yang Anda masukkan tidak sesuai. Silakan periksa kembali dan coba lagi.',
+        };
+      }
+
+      if (data['token'] != null || data['idToken'] != null || data['success'] == true) {
         final idToken = data['idToken'] ?? data['token'];
         final sessionId = data['sessionId'];
         final name = data['name'] ?? data['fullname'] ?? userId;
@@ -106,13 +167,18 @@ class AuthService {
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'User ID atau password salah.',
+          'message': data['message'] ?? 'User ID atau kata sandi yang Anda masukkan tidak sesuai. Silakan periksa kembali dan coba lagi.',
         };
       }
-    } catch (e) {
+    } on TimeoutException {
       return {
         'success': false,
-        'message': 'Gagal terhubung ke server DarkoPOS: $e',
+        'message': 'Waktu koneksi ke server POS habis. Pastikan jaringan internet stabil dan coba kembali.',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Tidak dapat terhubung ke server autentikasi POS. Pastikan koneksi internet stabil atau hubungi tim sistem.',
       };
     }
   }
