@@ -5,6 +5,23 @@ String normalizePlate(String? value) {
   return value.toUpperCase().replaceAll(RegExp(r'\s+'), '');
 }
 
+/// Pesan error standar jika nomor polisi tidak sesuai format plat Indonesia.
+const String kPlateStandardErrorMessage =
+    'Format plat tidak sesuai standar Indonesia (Contoh: B 1234 ABC atau BK 8899 XY).';
+
+/// Validasi plat nomor standar Indonesia:
+/// - 1-2 huruf kode wilayah (A-Z)
+/// - 1-4 digit angka nomor registrasi (1-9999)
+/// - 1-3 huruf seri sub-wilayah (A-Z)
+/// Contoh valid: "B 2156 TQR", "BK 8899 XY", "D 1 A"
+/// Contoh tidak valid: "BK 7", "asdasd", "12345"
+bool isValidPlate(String? value) {
+  if (value == null) return false;
+  final clean = value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  if (clean.isEmpty) return false;
+  return RegExp(r'^[A-Z]{1,2}\d{1,4}[A-Z]{1,3}$').hasMatch(clean);
+}
+
 String formatPlate(String? value) {
   if (value == null) return '';
   final clean = value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');

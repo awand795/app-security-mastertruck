@@ -112,9 +112,9 @@ class _CheckInViewState extends State<CheckInView> {
     final query = targetPlate ?? _nopolController.text;
     final clean = normalizePlate(query);
 
-    if (clean.length < 3) {
-      setState(() => _plateError = 'Minimal 3 karakter nomor polisi.');
-      _showSnackBar('Masukkan minimal 3 karakter nomor polisi.');
+    if (!isValidPlate(clean)) {
+      setState(() => _plateError = kPlateStandardErrorMessage);
+      _showSnackBar(kPlateStandardErrorMessage);
       return;
     }
 
@@ -354,8 +354,8 @@ class _CheckInViewState extends State<CheckInView> {
     final complaint = _complaintController.text.trim();
     final notes = _notesController.text.trim();
 
-    final plateError = cleanPlate.length < 3
-        ? 'Nomor polisi belum valid.'
+    final plateError = !isValidPlate(cleanPlate)
+        ? kPlateStandardErrorMessage
         : null;
     final driverError = driver.isEmpty ? 'Nama pengemudi wajib diisi.' : null;
     final picError = (_selectedPic == null || _selectedPic!.isEmpty)
@@ -368,7 +368,7 @@ class _CheckInViewState extends State<CheckInView> {
         _driverError = driverError;
         _picError = picError;
       });
-      _showSnackBar('Lengkapi data bertanda * terlebih dahulu.');
+      _showSnackBar(plateError ?? 'Lengkapi data bertanda * terlebih dahulu.');
       return;
     }
 

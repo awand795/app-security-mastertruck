@@ -33,6 +33,7 @@ class _CheckOutViewState extends State<CheckOutView> {
   final _nopolController = TextEditingController();
   final _notesController = TextEditingController();
 
+  String? _plateError;
   ActiveVehicle? _selectedVehicle;
   bool _isLoading = false;
   bool _hasLookedUp = false;
@@ -79,12 +80,18 @@ class _CheckOutViewState extends State<CheckOutView> {
 
   Future<void> _lookupVehicle(String nopol) async {
     final clean = normalizePlate(nopol);
-    if (clean.isEmpty) {
-      _showSnackBar('Masukkan nomor polisi terlebih dahulu.');
+    if (!isValidPlate(clean)) {
+      setState(() {
+        _plateError = kPlateStandardErrorMessage;
+        _selectedVehicle = null;
+        _hasLookedUp = false;
+      });
+      _showSnackBar(kPlateStandardErrorMessage);
       return;
     }
 
     setState(() {
+      _plateError = null;
       _isLoading = true;
       _selectedVehicle = null;
       _hasLookedUp = false;
@@ -131,6 +138,7 @@ class _CheckOutViewState extends State<CheckOutView> {
   void _clearPlate() {
     _nopolController.clear();
     setState(() {
+      _plateError = null;
       _selectedVehicle = null;
       _hasLookedUp = false;
       _exitPhotos.clear();
@@ -140,12 +148,14 @@ class _CheckOutViewState extends State<CheckOutView> {
   }
 
   void _handlePlateChanged(String _) {
-    if (_selectedVehicle == null && !_hasLookedUp) return;
     setState(() {
-      _selectedVehicle = null;
-      _hasLookedUp = false;
-      _exitPhotos.clear();
-      _notesController.clear();
+      _plateError = null;
+      if (_selectedVehicle != null || _hasLookedUp) {
+        _selectedVehicle = null;
+        _hasLookedUp = false;
+        _exitPhotos.clear();
+        _notesController.clear();
+      }
     });
   }
 
@@ -237,6 +247,15 @@ class _CheckOutViewState extends State<CheckOutView> {
   }
 
   Future<void> _handleCheckOut() async {
+    final rawPlate = _nopolController.text.trim();
+    final cleanPlate = normalizePlate(rawPlate);
+
+    if (!isValidPlate(cleanPlate)) {
+      setState(() => _plateError = kPlateStandardErrorMessage);
+      _showSnackBar(kPlateStandardErrorMessage);
+      return;
+    }
+
     final vehicle = _selectedVehicle;
     if (vehicle == null) {
       _showSnackBar('Pilih atau cari kendaraan terlebih dahulu.');
@@ -397,6 +416,16 @@ class _CheckOutViewState extends State<CheckOutView> {
                       onChanged: _handlePlateChanged,
                       onClear: _clearPlate,
                     ),
+                    if (_plateError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _plateError!,
+                        style: texts.bodySmall?.copyWith(
+                          color: scheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: [
