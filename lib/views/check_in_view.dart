@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../config/theme.dart';
 import '../models/booking_candidate_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
-import '../widgets/photo_quad_picker.dart';
+import '../widgets/app_widgets.dart';
 import '../widgets/gate_pass_dialog.dart';
+import '../widgets/photo_quad_picker.dart';
 
 class CheckInView extends StatefulWidget {
-  const CheckInView({Key? key}) : super(key: key);
+  const CheckInView({super.key, this.employeeLoader, this.candidateSearcher});
+
+  /// Opsional untuk preview/test; produksi memakai ApiService.
+  final Future<List<String>> Function()? employeeLoader;
+  final Future<List<CheckinCandidate>> Function(String query)?
+  candidateSearcher;
 
   @override
   State<CheckInView> createState() => _CheckInViewState();
@@ -23,6 +29,7 @@ class _CheckInViewState extends State<CheckInView> {
   final _complaintController = TextEditingController();
   final _notesController = TextEditingController();
   final _customTipeController = TextEditingController();
+  final _picController = TextEditingController();
 
   String _tipeKunjungan = 'Service';
   String _jenisKedatangan = 'WALK_IN';
@@ -36,8 +43,16 @@ class _CheckInViewState extends State<CheckInView> {
   bool _isSearchingPlate = false;
   bool _hasSearchedPlate = false;
 
-  final Map<String, String> _photos = {}; // 'DEPAN', 'BELAKANG', 'KIRI', 'KANAN' -> base64
+  final Map<String, String> _photos = {};
   bool _isSubmitting = false;
+  int? _uploadCurrent;
+  int? _uploadTotal;
+
+  String? _plateError;
+  String? _driverError;
+  String? _picError;
+
+  static const _tipeOptions = ['Service', 'Kunjungan', 'Beli Part', 'Lainnya'];
 
   @override
   void initState() {
@@ -53,62 +68,64 @@ class _CheckInViewState extends State<CheckInView> {
     _complaintController.dispose();
     _notesController.dispose();
     _customTipeController.dispose();
+    _picController.dispose();
     super.dispose();
   }
 
   Future<void> _loadEmployees() async {
     try {
-      final list = await ApiService.getEmployees();
-      if (mounted) {
-        setState(() {
-          _employeeList = list;
-          _isLoadingEmployees = false;
-        });
-      }
+      final loader = widget.employeeLoader ?? ApiService.getEmployees;
+      final list = await loader();
+      if (!mounted) return;
+      setState(() {
+        _employeeList = list;
+        _isLoadingEmployees = false;
+      });
     } catch (_) {
-      if (mounted) {
-        setState(() => _isLoadingEmployees = false);
-      }
+      if (!mounted) return;
+      setState(() => _isLoadingEmployees = false);
     }
   }
 
-  // Open Native Camera AI ANPR Scanner
   void _openAnprScanner() {
-    showModalBottomSheet(
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierDismissible: false,
+      useSafeArea: false,
       builder: (_) => AnprScannerSheet(
         onPlateDetected: (detectedPlate) {
+          if (!mounted) return;
           final formatted = formatPlate(detectedPlate);
           setState(() {
             _nopolController.text = formatted;
+            _plateError = null;
           });
-          // Otomatis langsung Cek Plat saat scan kamera selesai
           _executePlateSearch(formatted);
         },
       ),
     );
   }
 
-  // Eksekusi Cek Plat ke database / API
   Future<void> _executePlateSearch([String? targetPlate]) async {
     final query = targetPlate ?? _nopolController.text;
     final clean = normalizePlate(query);
 
     if (clean.length < 3) {
+      setState(() => _plateError = 'Minimal 3 karakter nomor polisi.');
       _showSnackBar('Masukkan minimal 3 karakter nomor polisi.');
       return;
     }
 
     setState(() {
+      _plateError = null;
       _isSearchingPlate = true;
       _hasSearchedPlate = false;
       _candidates = [];
     });
 
     try {
-      final results = await ApiService.searchCandidates(clean);
+      final searcher = widget.candidateSearcher ?? ApiService.searchCandidates;
+      final results = await searcher(clean);
       if (!mounted) return;
 
       setState(() {
@@ -117,37 +134,47 @@ class _CheckInViewState extends State<CheckInView> {
         _candidates = results;
       });
 
-      // 1. Cek apakah ada exact match
-      final exactMatches = results.where((item) => item.noPolisiClean == clean).toList();
+      final exactMatches = results
+          .where((item) => item.noPolisiClean == clean)
+          .toList();
 
       if (exactMatches.length == 1) {
-        // Tepat 1 kandidat cocok -> langsung auto-fill
-        _applyCandidate(exactMatches.first, forceFill: true);
+        await _applyCandidate(exactMatches.first, forceFill: true);
       } else if (results.isNotEmpty) {
-        // Lebih dari 1 kandidat -> buka Bottom Sheet pilihan
-        _showCandidatesSelectionSheet(results);
+        await _showCandidatesSelectionSheet(results);
       } else {
-        // Walk-in umum (tidak ada booking dan bukan member)
         setState(() {
           _selectedCandidate = null;
           _jenisKedatangan = 'WALK_IN';
           _bookingId = null;
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSearchingPlate = false);
-        _showSnackBar('Gagal mencari data plat: $e');
-      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSearchingPlate = false;
+        _plateError = 'Data belum dapat diperiksa. Coba lagi.';
+      });
+      _showSnackBar('Gagal memeriksa data plat. Coba lagi.');
     }
   }
 
-  void _applyCandidate(CheckinCandidate candidate, {bool forceFill = false}) {
+  Future<void> _applyCandidate(
+    CheckinCandidate candidate, {
+    bool forceFill = false,
+  }) async {
+    if (!mounted) return;
+
     setState(() {
       _selectedCandidate = candidate;
       _nopolController.text = formatPlate(candidate.noPolisi);
       _bookingId = candidate.bookingId;
-      _jenisKedatangan = candidate.source == 'BOOKING' ? 'BOOKING' : 'WALK_IN_MEMBER';
+      _jenisKedatangan = candidate.source == 'BOOKING'
+          ? 'BOOKING'
+          : 'WALK_IN_MEMBER';
+      _plateError = null;
+      _driverError = null;
+      _picError = null;
 
       final driverName = candidate.effectiveDriverName;
       final phone = candidate.effectivePhone;
@@ -171,191 +198,149 @@ class _CheckInViewState extends State<CheckInView> {
       }
     });
 
-    // Peringatan jika Booking belum dikonfirmasi admin
     if (candidate.source == 'BOOKING' && !candidate.isConfirmed) {
-      _showUnconfirmedBookingWarning(candidate);
+      await _showUnconfirmedBookingWarning(candidate);
     }
   }
 
-  void _showUnconfirmedBookingWarning(CheckinCandidate candidate) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: AppTheme.amberGold, size: 26),
-            const SizedBox(width: 8),
-            Text(
-              'Perhatian Booking',
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ],
-        ),
-        content: Text(
-          'Booking armada ${formatPlate(candidate.noPolisi)} (${candidate.customerName ?? 'Pelanggan'}) belum dikonfirmasi oleh Customer Service/Admin bengkel.\n\nPastikan koordinasi sebelum proses service lanjutan.',
-          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.corporateNavy,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Saya Mengerti'),
-          ),
-        ],
-      ),
-    );
-  }
+  Future<void> _showUnconfirmedBookingWarning(
+    CheckinCandidate candidate,
+  ) async {
+    if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semantic;
+    final texts = Theme.of(context).textTheme;
 
-  void _showCandidatesSelectionSheet(List<CheckinCandidate> list) {
-    showModalBottomSheet(
+    await showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
-        ),
-        decoration: const BoxDecoration(
-          color: AppTheme.surfaceWhite,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.xs,
+              AppSpacing.xl,
+              AppSpacing.xl,
             ),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: semantic.warningContainer,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Icon(
+                        Icons.warning_amber_rounded,
+                        color: semantic.onWarningContainer,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Booking belum dikonfirmasi',
+                        style: texts.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Text(
-                  'Pilih Data Kendaraan (${list.length})',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    color: AppTheme.corporateNavy,
+                  'Booking ${formatPlate(candidate.noPolisi)} untuk '
+                  '${candidate.customerName ?? 'pelanggan'} belum dikonfirmasi '
+                  'admin. Koordinasikan sebelum layanan lanjutan.',
+                  style: texts.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal'),
+                const SizedBox(height: AppSpacing.xl),
+                AppButton(
+                  label: 'Mengerti',
+                  onPressed: () => Navigator.of(sheetContext).pop(),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, idx) {
-                  final item = list[idx];
-                  final isBooking = item.source == 'BOOKING';
-                  final vehicleDesc = [item.merk, item.model].where((s) => s != null && s.isNotEmpty).join(' ');
+          ),
+        );
+      },
+    );
+  }
 
-                  return InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      _applyCandidate(item, forceFill: true);
-                    },
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppTheme.backgroundLight,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isBooking ? AppTheme.successGreen.withOpacity(0.4) : AppTheme.cardBorder,
-                          width: isBooking ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: isBooking ? AppTheme.successLight : AppTheme.corporateNavy.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              isBooking ? Icons.event_available : Icons.local_shipping,
-                              color: isBooking ? AppTheme.successGreen : AppTheme.corporateNavy,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      formatPlate(item.noPolisi),
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                        color: AppTheme.corporateNavy,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isBooking ? AppTheme.successLight : Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        isBooking ? 'BOOKING' : 'MEMBER FLEET',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 9,
-                                          color: isBooking ? AppTheme.successGreen : Colors.blue.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  isBooking
-                                      ? '${item.customerName ?? 'Pelanggan'} • Jadwal: ${item.tanggalBooking ?? '-'} ${item.jamBooking ?? ''}'
-                                      : '${item.namaPerusahaan ?? item.customerName ?? 'Member'} ${vehicleDesc.isNotEmpty ? '• $vehicleDesc' : ''}',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: AppTheme.textMuted, size: 20),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+  Future<void> _showCandidatesSelectionSheet(
+    List<CheckinCandidate> list,
+  ) async {
+    final selected = await showModalBottomSheet<CheckinCandidate>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _CandidatePickerSheet(candidates: list),
+    );
+
+    if (selected != null && mounted) {
+      await _applyCandidate(selected, forceFill: true);
+    }
+  }
+
+  Future<void> _openPicPicker() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _PicPickerSheet(
+        employees: _employeeList,
+        isLoading: _isLoadingEmployees,
+        selected: _selectedPic,
+        onRetry: () {
+          _loadEmployees();
+        },
       ),
     );
+
+    if (selected != null && mounted) {
+      setState(() {
+        _selectedPic = selected;
+        _picController.text = selected;
+        _picError = null;
+      });
+    }
+  }
+
+  void _handlePlateCleared() {
+    setState(() {
+      _selectedCandidate = null;
+      _hasSearchedPlate = false;
+      _candidates.clear();
+      _jenisKedatangan = 'WALK_IN';
+      _bookingId = null;
+      _plateError = null;
+    });
+  }
+
+  void _handlePlateChanged(String _) {
+    if (!_hasSearchedPlate &&
+        _selectedCandidate == null &&
+        _plateError == null) {
+      return;
+    }
+    setState(() {
+      _selectedCandidate = null;
+      _hasSearchedPlate = false;
+      _candidates.clear();
+      _jenisKedatangan = 'WALK_IN';
+      _bookingId = null;
+      _plateError = null;
+    });
   }
 
   Future<void> _handleSubmitCheckIn() async {
@@ -366,24 +351,35 @@ class _CheckInViewState extends State<CheckInView> {
     final complaint = _complaintController.text.trim();
     final notes = _notesController.text.trim();
 
-    if (cleanPlate.length < 3) {
-      _showSnackBar('Nomor polisi harus diisi dengan benar!');
-      return;
-    }
-    if (driver.isEmpty) {
-      _showSnackBar('Nama pengemudi wajib diisi!');
-      return;
-    }
-    if (_selectedPic == null || _selectedPic!.isEmpty) {
-      _showSnackBar('Pilih PIC / Petugas Tujuan terlebih dahulu!');
+    final plateError = cleanPlate.length < 3
+        ? 'Nomor polisi belum valid.'
+        : null;
+    final driverError = driver.isEmpty ? 'Nama pengemudi wajib diisi.' : null;
+    final picError = (_selectedPic == null || _selectedPic!.isEmpty)
+        ? 'Pilih PIC tujuan.'
+        : null;
+
+    if (plateError != null || driverError != null || picError != null) {
+      setState(() {
+        _plateError = plateError;
+        _driverError = driverError;
+        _picError = picError;
+      });
+      _showSnackBar('Lengkapi data bertanda * terlebih dahulu.');
       return;
     }
 
     final effectiveTipe = _tipeKunjungan == 'Lainnya'
-        ? (_customTipeController.text.trim().isNotEmpty ? _customTipeController.text.trim() : 'Lainnya')
+        ? (_customTipeController.text.trim().isNotEmpty
+              ? _customTipeController.text.trim()
+              : 'Lainnya')
         : _tipeKunjungan;
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _uploadCurrent = null;
+      _uploadTotal = null;
+    });
 
     final petugas = AuthService.currentSession?.name ?? 'Pos Security KIM 3';
     final res = await ApiService.postCheckIn(
@@ -404,23 +400,48 @@ class _CheckInViewState extends State<CheckInView> {
     if (res['success'] == true) {
       final kunjunganId = res['kunjungan_id'];
       final nomorTiket = res['nomor_tiket'] ?? 'TKT-KIM3';
+      var failedUploads = 0;
+      var totalUploads = 0;
 
-      // Upload Foto 4 Sudut jika ada
-      if (kunjunganId != null && _photos.isNotEmpty) {
-        for (final entry in _photos.entries) {
-          await ApiService.postAddFoto(
-            kunjunganId: kunjunganId is int ? kunjunganId : int.tryParse(kunjunganId.toString()) ?? 0,
-            jenisEvent: 'MASUK',
-            sudutPandang: entry.key,
-            base64Image: entry.value,
-          );
+      if (_photos.isNotEmpty) {
+        totalUploads = _photos.length;
+        if (kunjunganId == null) {
+          failedUploads = _photos.length;
+        } else {
+          final entries = _photos.entries.toList();
+          setState(() {
+            _uploadTotal = entries.length;
+            _uploadCurrent = 0;
+          });
+
+          for (var index = 0; index < entries.length; index++) {
+            if (!mounted) return;
+            setState(() => _uploadCurrent = index + 1);
+            try {
+              final uploaded = await ApiService.postAddFoto(
+                kunjunganId: kunjunganId is int
+                    ? kunjunganId
+                    : int.tryParse(kunjunganId.toString()) ?? 0,
+                jenisEvent: 'MASUK',
+                sudutPandang: entries[index].key,
+                base64Image: entries[index].value,
+              );
+              if (!uploaded) failedUploads++;
+            } catch (_) {
+              failedUploads++;
+            }
+          }
         }
       }
 
-      setState(() => _isSubmitting = false);
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _uploadCurrent = null;
+        _uploadTotal = null;
+      });
 
-      // Tampilkan Tiket Digital & QR Code
-      showDialog(
+      await showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (_) => GatePassDialog(
@@ -431,18 +452,25 @@ class _CheckInViewState extends State<CheckInView> {
           keluhan: complaint.isEmpty ? 'Pengecekan armada' : complaint,
           waktuMasuk: 'Baru Saja',
           petugasSecurity: petugas,
-          onClose: () {
-            _resetForm();
-          },
+          uploadWarning: failedUploads == 0
+              ? null
+              : '$failedUploads dari $totalUploads foto gagal diunggah. '
+                    'Data check-in tetap tersimpan, tetapi foto masuk belum lengkap.',
+          onClose: _resetForm,
         ),
       );
     } else {
-      setState(() => _isSubmitting = false);
+      setState(() {
+        _isSubmitting = false;
+        _uploadCurrent = null;
+        _uploadTotal = null;
+      });
       _showSnackBar(res['message'] ?? 'Gagal menyimpan check-in.');
     }
   }
 
   void _resetForm() {
+    if (!mounted) return;
     setState(() {
       _nopolController.clear();
       _driverNameController.clear();
@@ -450,709 +478,790 @@ class _CheckInViewState extends State<CheckInView> {
       _complaintController.clear();
       _notesController.clear();
       _customTipeController.clear();
+      _picController.clear();
       _tipeKunjungan = 'Service';
       _jenisKedatangan = 'WALK_IN';
       _bookingId = null;
       _selectedCandidate = null;
+      _selectedPic = null;
       _hasSearchedPlate = false;
       _candidates.clear();
       _photos.clear();
+      _isSubmitting = false;
+      _uploadCurrent = null;
+      _uploadTotal = null;
+      _plateError = null;
+      _driverError = null;
+      _picError = null;
     });
   }
 
   void _showSnackBar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600)),
-        backgroundColor: AppTheme.corporateNavy,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  AppStatus _statusFor(CheckinCandidate? candidate) {
+    if (candidate == null) return AppStatus.walkIn;
+    return candidate.source == 'BOOKING' ? AppStatus.booking : AppStatus.member;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isBooking = _selectedCandidate?.source == 'BOOKING';
-    final isMember = _selectedCandidate?.source == 'MEMBER_UNIT';
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semantic;
+    final texts = Theme.of(context).textTheme;
+    final photoCount = _photos.length.clamp(0, 4).toInt();
+    final uploadLabel = _uploadCurrent != null && _uploadTotal != null
+        ? 'Mengunggah foto $_uploadCurrent/$_uploadTotal'
+        : null;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ==========================================
-              // KARTU 1: IDENTIFIKASI PELAT NOMOR KENDARAAN
-              // ==========================================
-              Card(
-                elevation: 0,
-                color: AppTheme.surfaceWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  side: const BorderSide(color: AppTheme.cardBorder, width: 1),
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.xl,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.corporateNavy,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.directions_car, color: AppTheme.amberGold, size: 20),
-                              ),
-                              const SizedBox(width: 10),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Nomor Polisi Kendaraan',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
-                                      color: AppTheme.corporateNavy,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Deteksi Otomatis atau Ketik Plat',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          // Status Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isBooking
-                                  ? AppTheme.successLight
-                                  : (isMember ? Colors.blue.shade50 : AppTheme.backgroundLight),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isBooking
-                                    ? AppTheme.successGreen.withOpacity(0.4)
-                                    : (isMember ? Colors.blue.shade200 : AppTheme.cardBorder),
-                              ),
-                            ),
-                            child: Text(
-                              isBooking ? 'BOOKING' : (isMember ? 'MEMBER FLEET' : 'WALK-IN'),
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 10,
-                                color: isBooking
-                                    ? AppTheme.successGreen
-                                    : (isMember ? Colors.blue.shade700 : AppTheme.textSecondary),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Kolom Input Plat Nomor - Full Width, font besar leluasa (tidak terpotong kamera)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.backgroundLight,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppTheme.cardBorder, width: 1.5),
-                        ),
-                        child: TextField(
-                          controller: _nopolController,
-                          textCapitalization: TextCapitalization.characters,
-                          inputFormatters: [PlateInputFormatter()],
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.chivo(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 3.0,
-                            color: AppTheme.corporateNavy,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'B 2156 TQR',
-                            hintStyle: GoogleFonts.chivo(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 3.0,
-                              color: Colors.grey.shade400,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            suffixIcon: _nopolController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.cancel_rounded, color: AppTheme.textMuted, size: 22),
-                                    onPressed: () {
-                                      _nopolController.clear();
-                                      setState(() {
-                                        _selectedCandidate = null;
-                                        _hasSearchedPlate = false;
-                                        _candidates.clear();
-                                        _jenisKedatangan = 'WALK_IN';
-                                        _bookingId = null;
-                                      });
-                                    },
-                                  )
-                                : null,
-                          ),
-                          onSubmitted: (val) => _executePlateSearch(val),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Quick Action Buttons: Scan Kamera AI & Cek Plat Booking
-                      Row(
-                        children: [
-                          // 1. Scan Kamera AI ANPR Card Button
-                          Expanded(
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _openAnprScanner,
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.corporateNavy.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: AppTheme.corporateNavy.withOpacity(0.2),
-                                      width: 1.2,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.corporateNavy,
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Icon(
-                                          Icons.document_scanner_rounded,
-                                          color: AppTheme.amberGold,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              'Scan Plat',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 12,
-                                                color: AppTheme.corporateNavy,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Deteksi AI Instan',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 9.5,
-                                                color: AppTheme.textSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-
-                          // 2. Cek Plat / Booking Database Button
-                          Expanded(
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _isSearchingPlate ? null : () => _executePlateSearch(),
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF0A2540),
-                                        Color(0xFF1E3A8A),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF0A2540).withOpacity(0.2),
-                                        blurRadius: 6,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.16),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: _isSearchingPlate
-                                            ? const SizedBox(
-                                                width: 18,
-                                                height: 18,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: AppTheme.amberGold,
-                                                ),
-                                              )
-                                            : const Icon(
-                                                Icons.search_rounded,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              _isSearchingPlate ? 'Memeriksa...' : 'Cek Plat',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 12,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Verifikasi Booking',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 9.5,
-                                                color: Colors.white.withOpacity(0.8),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      // Hasil Verifikasi Plat Status Banner
-                      if (_hasSearchedPlate) ...[
-                        const SizedBox(height: 14),
-                        if (isBooking && _selectedCandidate != null)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.successLight,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.successGreen.withOpacity(0.4)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: AppTheme.successGreen, size: 22),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Booking Terkonfirmasi: ${_selectedCandidate!.customerName ?? 'Pelanggan'}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 12,
-                                          color: AppTheme.successGreen,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Jadwal: ${_selectedCandidate!.tanggalBooking ?? '-'} ${_selectedCandidate!.jamBooking ?? ''} • ${_selectedCandidate!.jenisLayanan ?? 'Service'}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 11,
-                                          color: Colors.green.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else if (isMember && _selectedCandidate != null)
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blue.shade200),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.local_shipping_rounded, color: Colors.blue.shade700, size: 22),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Armada Member Fleet: ${_selectedCandidate!.namaPerusahaan ?? _selectedCandidate!.customerName ?? 'Member'}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 12,
-                                          color: Colors.blue.shade800,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Tipe Unit: ${[_selectedCandidate!.merk, _selectedCandidate!.model].where((s) => s != null).join(' ')}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 11,
-                                          color: Colors.blue.shade900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.backgroundLight,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.cardBorder),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.info_outline_rounded, color: AppTheme.textSecondary, size: 20),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Walk-In Umum: Kendaraan belum memiliki jadwal booking / member. Data dapat diisi langsung.',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ==========================================
-              // KARTU 2: DATA KUNJUNGAN & PENGEMUDI
-              // ==========================================
-              Card(
-                elevation: 0,
-                color: AppTheme.surfaceWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  side: const BorderSide(color: AppTheme.cardBorder, width: 1),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.amberGold.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.assignment_ind_rounded, color: AppTheme.amberGold, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Data Kunjungan & Supir',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: AppTheme.corporateNavy,
-                                ),
-                              ),
-                              Text(
-                                'Identitas pengemudi dan keperluan kunjungan',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-
-                      // Tujuan Kedatangan
-                      Text(
-                        'Tujuan Kedatangan *',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _tipeKunjungan,
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Service', child: Text('Service / Perbaikan')),
-                          DropdownMenuItem(value: 'Kunjungan', child: Text('Kunjungan / Tamu')),
-                          DropdownMenuItem(value: 'Beli Part', child: Text('Beli Sparepart')),
-                          DropdownMenuItem(value: 'Lainnya', child: Text('Lainnya (Isi Sendiri)')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) setState(() => _tipeKunjungan = val);
-                        },
-                      ),
-
-                      if (_tipeKunjungan == 'Lainnya') ...[
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _customTipeController,
-                          decoration: InputDecoration(
-                            hintText: 'Tuliskan tujuan kedatangan...',
-                            filled: true,
-                            fillColor: AppTheme.backgroundLight,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 14),
-
-                      // Nama Pengemudi
-                      Text(
-                        'Nama Pengemudi *',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _driverNameController,
-                        decoration: InputDecoration(
-                          hintText: 'Contoh: Joko Widodo / Supir Armada',
-                          prefixIcon: const Icon(Icons.person_outline, size: 20, color: AppTheme.corporateNavy),
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // No Kontak / HP Pengemudi
-                      Text(
-                        'No. Telepon / WhatsApp Pengemudi',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _driverPhoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          hintText: 'Contoh: 081234567890',
-                          prefixIcon: const Icon(Icons.phone_outlined, size: 20, color: AppTheme.corporateNavy),
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // PIC / Petugas Tujuan
-                      Text(
-                        'PIC / Petugas Tujuan *',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _selectedPic,
-                        isExpanded: true,
-                        hint: Text(
-                          _isLoadingEmployees ? 'Memuat daftar PIC...' : 'Pilih PIC / SA / Mekanik',
-                          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppTheme.textMuted),
-                        ),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                        items: _employeeList.map((e) {
-                          return DropdownMenuItem<String>(
-                            value: e,
-                            child: Text(e, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600)),
-                          );
-                        }).toList(),
-                        onChanged: (val) => setState(() => _selectedPic = val),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // Keluhan / Keperluan
-                      Text(
-                        'Keperluan Kunjungan / Keluhan Unit',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _complaintController,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          hintText: 'Contoh: Ganti oli berkala, perbaikan rem, cek suspensi...',
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // Catatan Masuk (Optional)
-                      Text(
-                        'Catatan Tambahan Masuk (Opsional)',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _notesController,
-                        decoration: InputDecoration(
-                          hintText: 'Catatan kondisi fisik / barang bawaan supir...',
-                          filled: true,
-                          fillColor: AppTheme.backgroundLight,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ==========================================
-              // KARTU 3: DOKUMENTASI FISIK 4 SUDUT
-              // ==========================================
-              Card(
-                elevation: 0,
-                color: AppTheme.surfaceWhite,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  side: const BorderSide(color: AppTheme.cardBorder, width: 1),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: PhotoQuadPicker(
-                    photos: _photos,
-                    onPhotoCaptured: (angle, b64) {
-                      setState(() => _photos[angle] = b64);
-                    },
-                    onPhotoRemoved: (angle) {
-                      setState(() => _photos.remove(angle));
-                    },
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // ==========================================
-              // TOMBOL EKSEKUSI CHECK-IN
-              // ==========================================
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _handleSubmitCheckIn,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.corporateNavy,
-                    foregroundColor: Colors.white,
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SectionHeader(
+                      title: 'Nomor Polisi',
+                      subtitle: 'Scan kamera atau ketik manual',
+                      icon: Icons.directions_car_rounded,
+                      trailing: _hasSearchedPlate || _selectedCandidate != null
+                          ? StatusChip(
+                              _statusFor(_selectedCandidate),
+                              compact: true,
+                            )
+                          : null,
                     ),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Konfirmasi & Cetak Tiket Masuk',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                                letterSpacing: 0.3,
-                              ),
+                    const SizedBox(height: AppSpacing.sm),
+                    PlateInput(
+                      controller: _nopolController,
+                      onSubmitted: _executePlateSearch,
+                      onChanged: _handlePlateChanged,
+                      onClear: _handlePlateCleared,
+                    ),
+                    if (_plateError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _plateError!,
+                        style: texts.bodySmall?.copyWith(
+                          color: scheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            label: 'Scan Plat',
+                            icon: Icons.document_scanner_rounded,
+                            onPressed: _openAnprScanner,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: AppButton(
+                            label: 'Cek Data',
+                            icon: Icons.search_rounded,
+                            variant: AppButtonVariant.secondary,
+                            loading: _isSearchingPlate,
+                            loadingLabel: 'Memeriksa data',
+                            onPressed: _isSearchingPlate
+                                ? null
+                                : () => _executePlateSearch(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_hasSearchedPlate) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _CandidateResultCard(
+                        candidate: _selectedCandidate,
+                        searchedPlate: _nopolController.text,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    const SectionHeader(
+                      title: 'Data Pengemudi & Tujuan',
+                      subtitle: 'Identitas pengemudi dan keperluan kunjungan',
+                      icon: Icons.badge_outlined,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Tujuan kunjungan *',
+                            style: texts.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            children: _tipeOptions.map((option) {
+                              final selected = _tipeKunjungan == option;
+                              final display = option == 'Beli Part'
+                                  ? 'Sparepart'
+                                  : option;
+                              return ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 48,
+                                ),
+                                child: ChoiceChip(
+                                  label: Text(display),
+                                  selected: selected,
+                                  showCheckmark: false,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.padded,
+                                  selectedColor: scheme.primaryContainer,
+                                  backgroundColor: scheme.surfaceContainer,
+                                  side: BorderSide(
+                                    color: selected
+                                        ? scheme.primary
+                                        : scheme.outlineVariant,
+                                  ),
+                                  labelStyle: texts.labelLarge?.copyWith(
+                                    color: selected
+                                        ? scheme.onPrimaryContainer
+                                        : scheme.onSurface,
+                                  ),
+                                  onSelected: (value) {
+                                    if (!value) return;
+                                    setState(() {
+                                      _tipeKunjungan = option;
+                                      if (option != 'Lainnya') {
+                                        _customTipeController.clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          if (_tipeKunjungan == 'Lainnya') ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            AppTextField(
+                              controller: _customTipeController,
+                              label: 'Tujuan lainnya',
+                              hint: 'Tuliskan tujuan kedatangan',
+                              required: true,
+                              textCapitalization: TextCapitalization.sentences,
                             ),
                           ],
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _driverNameController,
+                            label: 'Nama pengemudi',
+                            hint: 'Nama sesuai identitas',
+                            required: true,
+                            prefixIcon: Icons.person_outline_rounded,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            errorText: _driverError,
+                            onChanged: (_) {
+                              if (_driverError != null) {
+                                setState(() => _driverError = null);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _driverPhoneController,
+                            label: 'Nomor telepon pengemudi',
+                            hint: 'Contoh: 0812 3456 7890',
+                            prefixIcon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _picController,
+                            label: 'PIC / Petugas Tujuan',
+                            hint: _isLoadingEmployees
+                                ? 'Memuat daftar PIC...'
+                                : 'Pilih petugas tujuan',
+                            required: true,
+                            readOnly: true,
+                            prefixIcon: Icons.person_search_outlined,
+                            errorText: _picError,
+                            onTap: _openPicPicker,
+                            suffixIcon: IconButton(
+                              tooltip: 'Pilih PIC',
+                              onPressed: _openPicPicker,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _complaintController,
+                            label: 'Keperluan / keluhan',
+                            hint: 'Contoh: ganti oli, periksa rem',
+                            maxLines: 3,
+                            minLines: 2,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _notesController,
+                            label: 'Catatan tambahan',
+                            hint: 'Opsional, misalnya kondisi barang bawaan',
+                            maxLines: 2,
+                            minLines: 2,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    SectionHeader(
+                      title: 'Foto Kendaraan',
+                      subtitle: 'Empat sudut kendaraan',
+                      icon: Icons.photo_camera_outlined,
+                      trailing: Text(
+                        '$photoCount/4',
+                        style: texts.labelLarge?.copyWith(
+                          color: photoCount == 4
+                              ? semantic.success
+                              : scheme.onSurfaceVariant,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: PhotoQuadPicker(
+                        photos: _photos,
+                        enabled: !_isSubmitting,
+                        uploadCurrent: _uploadCurrent,
+                        uploadTotal: _uploadTotal,
+                        onPhotoCaptured: (angle, base64) {
+                          setState(() => _photos[angle] = base64);
+                        },
+                        onPhotoRemoved: (angle) {
+                          setState(() => _photos.remove(angle));
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
                 ),
               ),
+            ),
+          ),
+        ),
+        StickyBottomBar(
+          hint: _isSubmitting
+              ? 'Mohon tunggu, data sedang diproses.'
+              : 'Data bertanda * wajib diisi.',
+          child: AppButton(
+            label: 'Konfirmasi Check-In',
+            icon: Icons.check_circle_outline_rounded,
+            loading: _isSubmitting,
+            loadingLabel: uploadLabel ?? 'Memproses check-in',
+            onPressed: _isSubmitting ? null : _handleSubmitCheckIn,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-              const SizedBox(height: 32),
+class _CandidateResultCard extends StatelessWidget {
+  const _CandidateResultCard({this.candidate, this.searchedPlate});
+
+  final CheckinCandidate? candidate;
+  final String? searchedPlate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semantic;
+    final texts = Theme.of(context).textTheme;
+
+    if (candidate == null) {
+      return AppCard(
+        accentColor: scheme.outline,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: semantic.neutralContainer,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(
+                Icons.info_outline_rounded,
+                size: 20,
+                color: semantic.onNeutralContainer,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const StatusChip(AppStatus.walkIn, compact: true),
+                      const Spacer(),
+                      PlateBadge(
+                        searchedPlate == null || searchedPlate!.isEmpty
+                            ? '-'
+                            : searchedPlate!,
+                        size: PlateBadgeSize.small,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Kendaraan belum terdaftar sebagai booking atau member.',
+                    style: texts.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Lengkapi data pengemudi dan tujuan secara manual.',
+                    style: texts.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final item = candidate!;
+    final isBooking = item.source == 'BOOKING';
+    final confirmed = item.isConfirmed;
+    final accent = isBooking
+        ? (confirmed ? semantic.info : semantic.warning)
+        : scheme.secondary;
+    final vehicle = [
+      item.merk,
+      item.model,
+      item.tahun?.toString(),
+    ].whereType<String>().where((part) => part.isNotEmpty).join(' ');
+
+    return AppCard(
+      accentColor: accent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              StatusChip(
+                isBooking ? AppStatus.booking : AppStatus.member,
+                label: isBooking
+                    ? (confirmed ? 'Booking terkonfirmasi' : 'Booking')
+                    : 'Member Fleet',
+                compact: true,
+              ),
+              const Spacer(),
+              PlateBadge(item.noPolisi, size: PlateBadgeSize.small),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            isBooking
+                ? (item.customerName ?? 'Pelanggan')
+                : (item.namaPerusahaan ?? item.customerName ?? 'Member'),
+            style: texts.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (isBooking) ...[
+            InfoRow(
+              label: 'Jadwal',
+              value: '${item.tanggalBooking ?? '-'} ${item.jamBooking ?? ''}'
+                  .trim(),
+              dense: true,
+            ),
+            InfoRow(
+              label: 'Layanan',
+              value: item.jenisLayanan ?? 'Service',
+              dense: true,
+            ),
+            if (item.keluhan != null && item.keluhan!.isNotEmpty)
+              InfoRow(label: 'Keluhan', value: item.keluhan!, dense: true),
+          ] else ...[
+            InfoRow(
+              label: 'Unit',
+              value: vehicle.isEmpty ? '-' : vehicle,
+              dense: true,
+            ),
+            if (item.namaPenggunaFleet != null &&
+                item.namaPenggunaFleet!.isNotEmpty)
+              InfoRow(
+                label: 'Pengguna',
+                value: item.namaPenggunaFleet!,
+                dense: true,
+              ),
+            if (item.unitTelepon != null && item.unitTelepon!.isNotEmpty)
+              InfoRow(label: 'Telepon', value: item.unitTelepon!, dense: true),
+          ],
+          if (isBooking && !confirmed) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: semantic.warningContainer,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: semantic.onWarningContainer,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      'Booking belum dikonfirmasi admin. Koordinasikan sebelum layanan lanjutan.',
+                      style: texts.bodySmall?.copyWith(
+                        color: semantic.onWarningContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CandidatePickerSheet extends StatelessWidget {
+  const _CandidatePickerSheet({required this.candidates});
+
+  final List<CheckinCandidate> candidates;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xs,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pilih kendaraan',
+                          style: texts.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '${candidates.length} data ditemukan',
+                          style: texts.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tutup',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.xs),
+                  itemBuilder: (context, index) {
+                    final item = candidates[index];
+                    final isBooking = item.source == 'BOOKING';
+                    final detail = isBooking
+                        ? '${item.customerName ?? 'Pelanggan'} • '
+                              '${item.tanggalBooking ?? '-'} ${item.jamBooking ?? ''}'
+                        : '${item.namaPerusahaan ?? item.customerName ?? 'Member'}'
+                              '${item.merk != null ? ' • ${item.merk} ${item.model ?? ''}' : ''}';
+
+                    return AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      onTap: () => Navigator.of(context).pop(item),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isBooking
+                                  ? scheme.primaryContainer
+                                  : scheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            child: Icon(
+                              isBooking
+                                  ? Icons.event_available_rounded
+                                  : Icons.local_shipping_rounded,
+                              size: 20,
+                              color: isBooking
+                                  ? scheme.onPrimaryContainer
+                                  : scheme.onSecondaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        formatPlate(item.noPolisi),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: texts.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xs),
+                                    StatusChip(
+                                      isBooking
+                                          ? AppStatus.booking
+                                          : AppStatus.member,
+                                      compact: true,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  detail,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: texts.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PicPickerSheet extends StatefulWidget {
+  const _PicPickerSheet({
+    required this.employees,
+    required this.isLoading,
+    required this.selected,
+    required this.onRetry,
+  });
+
+  final List<String> employees;
+  final bool isLoading;
+  final String? selected;
+  final VoidCallback onRetry;
+
+  @override
+  State<_PicPickerSheet> createState() => _PicPickerSheetState();
+}
+
+class _PicPickerSheetState extends State<_PicPickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+    final query = _query.toLowerCase();
+    final filtered = widget.employees
+        .where((name) => name.toLowerCase().contains(query))
+        .toList();
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xs,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pilih PIC / Petugas',
+                          style: texts.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Cari nama penerima atau penanggung jawab',
+                          style: texts.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tutup',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SearchField(
+                autofocus: true,
+                hintText: 'Cari nama PIC',
+                debounce: const Duration(milliseconds: 120),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              if (widget.isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (widget.employees.isEmpty)
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.person_search_outlined,
+                          size: 40,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'Daftar PIC belum tersedia.',
+                          textAlign: TextAlign.center,
+                          style: texts.bodyMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        AppButton(
+                          label: 'Muat ulang',
+                          icon: Icons.refresh_rounded,
+                          size: AppButtonSize.medium,
+                          expanded: false,
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            widget.onRetry();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (filtered.isEmpty)
+                Flexible(
+                  child: Center(
+                    child: Text(
+                      'PIC tidak ditemukan.',
+                      style: texts.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.xxs),
+                    itemBuilder: (context, index) {
+                      final employee = filtered[index];
+                      final isSelected = widget.selected == employee;
+                      return ListTile(
+                        leading: InitialsAvatar(name: employee, size: 40),
+                        title: Text(
+                          employee,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: texts.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? Icon(
+                                Icons.check_circle_rounded,
+                                color: context.semantic.success,
+                              )
+                            : null,
+                        onTap: () => Navigator.of(context).pop(employee),
+                      );
+                    },
+                  ),
+                ),
             ],
           ),
         ),
