@@ -248,7 +248,7 @@ List<ActiveVehicle> _activeVehicles() {
       statusServis: 'Selesai',
       nomorSpk: 'SPK-2026-1042',
       nomorInvoice: 'INV-2026-1042',
-      picTujuan: 'Budi Santoso',
+      picTujuan: 'EDI',
       waktuCheckIn: _now.subtract(const Duration(hours: 2, minutes: 15)),
     ),
     ActiveVehicle(

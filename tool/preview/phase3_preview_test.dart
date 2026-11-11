@@ -26,10 +26,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 const String _goldenPath = '../../docs/revamp/fase-3';
 
 const List<EmployeeItem> _employees = [
-  EmployeeItem(name: 'Budi Santoso', position: 'Service Advisor', isServiceAdvisor: true),
-  EmployeeItem(name: 'Rina Wulandari', position: 'CASHIER'),
-  EmployeeItem(name: 'Agus Setiawan', position: 'SUPERVISOR'),
-  EmployeeItem(name: 'Dewi Lestari', position: 'ADMIN'),
+  EmployeeItem(id: 8, name: 'EDI', employeeId: '000008', position: 'Service Advisor', mobileNumber: '081325262773', isServiceAdvisor: true),
+  EmployeeItem(id: 303, name: 'Fajar Rivaldi', employeeId: '000239', position: 'Service Advisor', mobileNumber: '086467378383', isServiceAdvisor: true),
+  EmployeeItem(id: 302, name: 'Itadori Yuji', employeeId: '000238', position: 'Service Advisor', mobileNumber: '08727272727', isServiceAdvisor: true),
+  EmployeeItem(id: 295, name: 'Hisar Mangapul Paidaon Tambunan', employeeId: '3', position: 'ADMIN', mobileNumber: '81375320851', isServiceAdvisor: false),
 ];
 
 void main() {
@@ -353,7 +353,7 @@ Widget _home({String? initialCheckoutPlate, bool unconfirmedBooking = false}) {
       statusServis: 'Selesai',
       nomorSpk: 'SPK-2026-1042',
       nomorInvoice: 'INV-2026-1042',
-      picTujuan: 'Budi Santoso',
+      picTujuan: 'EDI',
       waktuCheckIn: now.subtract(const Duration(hours: 2, minutes: 15)),
     ),
     ActiveVehicle(
