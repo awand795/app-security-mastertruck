@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../config/theme.dart';
 import '../models/active_vehicle_model.dart';
 import '../models/booking_candidate_model.dart';
+import '../models/employee_model.dart';
 import '../models/memo_keluar_model.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
@@ -31,7 +32,7 @@ class HomeNavView extends StatefulWidget {
 
   /// Opsional untuk preview test; produksi memakai ApiService di BerandaView.
   final Future<BerandaData> Function()? dashboardLoader;
-  final Future<List<String>> Function()? checkInEmployeeLoader;
+  final Future<List<EmployeeItem>> Function()? checkInEmployeeLoader;
   final Future<List<CheckinCandidate>> Function(String query)?
   checkInCandidateSearcher;
   final Future<List<ActiveVehicle>> Function(String query)?

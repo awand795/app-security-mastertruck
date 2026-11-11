@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:bengkel_kim3_security_app/config/theme.dart';
 import 'package:bengkel_kim3_security_app/models/active_vehicle_model.dart';
+import 'package:bengkel_kim3_security_app/models/employee_model.dart';
 import 'package:bengkel_kim3_security_app/models/memo_keluar_model.dart';
 import 'package:bengkel_kim3_security_app/services/auth_service.dart';
 import 'package:bengkel_kim3_security_app/views/home_nav_view.dart';
@@ -272,11 +273,11 @@ Widget _home({String? initialCheckoutPlate}) {
   );
 }
 
-const List<String> _employees = [
-  'Budi Santoso',
-  'Rina Wulandari',
-  'Agus Setiawan',
-  'Dewi Lestari',
+const List<EmployeeItem> _employees = [
+  EmployeeItem(name: 'Budi Santoso', position: 'Service Advisor', isServiceAdvisor: true),
+  EmployeeItem(name: 'Rina Wulandari', position: 'CASHIER'),
+  EmployeeItem(name: 'Agus Setiawan', position: 'SUPERVISOR'),
+  EmployeeItem(name: 'Dewi Lestari', position: 'ADMIN'),
 ];
 
 List<ActiveVehicle> _activeVehicles() {

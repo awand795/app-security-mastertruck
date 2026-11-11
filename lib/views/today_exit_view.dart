@@ -7,12 +7,9 @@ import '../services/api_service.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/gate_pass_dialog.dart';
 
-enum _HistoryFilter { all, today, week }
-
-/// Riwayat gate pass kendaraan yang sudah keluar.
+/// Riwayat gate pass kendaraan yang sudah keluar hari ini.
 ///
-/// Pencarian memakai [SearchField] yang di-debounce, filter tanggal bekerja di
-/// sisi klien, dan daftar dapat ditarik untuk menyegarkan data.
+/// Pencarian memakai [SearchField] yang di-debounce, dan daftar dapat ditarik untuk menyegarkan data.
 class TodayExitView extends StatefulWidget {
   const TodayExitView({super.key, this.memoLoader, this.clock});
 
@@ -30,7 +27,6 @@ class _TodayExitViewState extends State<TodayExitView> {
   final _searchController = TextEditingController();
 
   List<MemoKeluar> _memos = const [];
-  _HistoryFilter _filter = _HistoryFilter.all;
   String _query = '';
   bool _isLoading = true;
   bool _isSearching = false;
@@ -105,28 +101,9 @@ class _TodayExitViewState extends State<TodayExitView> {
     _loadData(query: '', showSearching: false);
   }
 
-  void _selectFilter(_HistoryFilter filter) {
-    if (_filter == filter) return;
-    setState(() => _filter = filter);
-  }
-
   List<MemoKeluar> get _filteredMemos {
     final now = widget.clock?.call() ?? DateTime.now();
-    switch (_filter) {
-      case _HistoryFilter.all:
-        return _memos;
-      case _HistoryFilter.today:
-        return _memos.where((m) => _isSameDay(m.waktuKeluar, now)).toList();
-      case _HistoryFilter.week:
-        return _memos
-            .where((m) => _isWithinLastSevenDays(m.waktuKeluar, now))
-            .toList();
-    }
-  }
-
-  int get _todayCount {
-    final now = widget.clock?.call() ?? DateTime.now();
-    return _memos.where((m) => _isSameDay(m.waktuKeluar, now)).length;
+    return _memos.where((m) => _isSameDay(m.waktuKeluar, now)).toList();
   }
 
   void _showGatePass(MemoKeluar memo) {
@@ -178,40 +155,39 @@ class _TodayExitViewState extends State<TodayExitView> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${filtered.length} memo',
+                          '${filtered.length} kendaraan keluar',
                           style: texts.labelLarge?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      Text(
-                        '$_todayCount hari ini',
-                        style: texts.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: [
-                      _buildFilterChip(
-                        label: 'Semua',
-                        selected: _filter == _HistoryFilter.all,
-                        onSelected: () => _selectFilter(_HistoryFilter.all),
-                      ),
-                      _buildFilterChip(
-                        label: 'Hari ini',
-                        selected: _filter == _HistoryFilter.today,
-                        onSelected: () => _selectFilter(_HistoryFilter.today),
-                      ),
-                      _buildFilterChip(
-                        label: '7 hari',
-                        selected: _filter == _HistoryFilter.week,
-                        onSelected: () => _selectFilter(_HistoryFilter.week),
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 13,
+                              color: scheme.primary,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Hari ini (${DateFormat('dd MMM yyyy').format(widget.clock?.call() ?? DateTime.now())})',
+                              style: texts.labelSmall?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -278,44 +254,8 @@ class _TodayExitViewState extends State<TodayExitView> {
     );
   }
 
-  Widget _buildFilterChip({
-    required String label,
-    required bool selected,
-    required VoidCallback onSelected,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final texts = Theme.of(context).textTheme;
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onSelected(),
-        showCheckmark: false,
-        materialTapTargetSize: MaterialTapTargetSize.padded,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-        backgroundColor: scheme.surfaceContainer,
-        selectedColor: scheme.primaryContainer,
-        side: BorderSide(
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.4)
-              : scheme.outlineVariant,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        labelStyle: texts.labelLarge?.copyWith(
-          color: selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyState() {
     final hasQuery = _query.trim().isNotEmpty;
-    final hasFilter = _filter != _HistoryFilter.all;
 
     if (hasQuery) {
       return EmptyState(
@@ -328,22 +268,11 @@ class _TodayExitViewState extends State<TodayExitView> {
       );
     }
 
-    if (hasFilter) {
-      return EmptyState(
-        icon: Icons.filter_alt_off_outlined,
-        title: 'Tidak ada memo pada filter ini',
-        message: 'Tampilkan semua riwayat untuk melihat daftar lengkap.',
-        actionLabel: 'Tampilkan semua',
-        actionIcon: Icons.filter_alt_off_rounded,
-        onAction: () => _selectFilter(_HistoryFilter.all),
-      );
-    }
-
     return EmptyState(
       icon: Icons.receipt_long_outlined,
-      title: 'Belum ada kendaraan keluar',
+      title: 'Belum ada kendaraan keluar hari ini',
       message:
-          'Memo gate pass akan muncul di sini setelah kendaraan check-out.',
+          'Memo gate pass hari ini akan muncul di sini setelah kendaraan check-out.',
       actionLabel: 'Muat ulang',
       actionIcon: Icons.refresh_rounded,
       onAction: () => _loadData(showSkeleton: true, showSearching: false),
@@ -509,10 +438,4 @@ bool _isSameDay(DateTime? value, DateTime now) {
   return value.year == now.year &&
       value.month == now.month &&
       value.day == now.day;
-}
-
-bool _isWithinLastSevenDays(DateTime? value, DateTime now) {
-  if (value == null) return false;
-  final difference = now.difference(value);
-  return !difference.isNegative && difference.inDays < 7;
 }

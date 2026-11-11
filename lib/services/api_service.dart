@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/active_vehicle_model.dart';
 import '../models/booking_candidate_model.dart';
+import '../models/employee_model.dart';
 import '../models/memo_keluar_model.dart';
 
 class ApiService {
@@ -179,17 +180,18 @@ class ApiService {
   }
 
   // 7. Get Employee list for PIC dropdown
-  static Future<List<String>> getEmployees() async {
-    final uri = Uri.parse('${ApiConfig.gatewayBaseUrl}/mastertruck/security/employees');
+  static Future<List<EmployeeItem>> getEmployees({String query = ''}) async {
+    final uri = Uri.parse('${ApiConfig.gatewayBaseUrl}/mastertruck/security/employees')
+        .replace(queryParameters: query.isNotEmpty ? {'q': query} : null);
 
     try {
-      final res = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 6));
+      final res = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List) {
           return data
-              .map((e) => (e['nama'] ?? e['name'] ?? e['nama_lengkap'] ?? '').toString())
-              .where((s) => s.isNotEmpty)
+              .map((e) => EmployeeItem.fromJson(e as Map<String, dynamic>))
+              .where((emp) => emp.name.isNotEmpty)
               .toList();
         }
       }

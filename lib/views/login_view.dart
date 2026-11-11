@@ -274,7 +274,7 @@ class _LoginHero extends StatelessWidget {
       constraints: BoxConstraints(minHeight: height),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppTheme.navyDark, AppTheme.corporateNavy],
+          colors: [Color(0xFF1E3A8A), Color(0xFF1D4ED8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -362,7 +362,7 @@ class _LoginHero extends StatelessWidget {
                       child: Text(
                         'BENGKEL KIM 3',
                         style: texts.labelSmall?.copyWith(
-                          color: AppTheme.corporateNavy,
+                          color: const Color(0xFF1E3A8A),
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.8,
                         ),

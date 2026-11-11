@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
 import '../models/booking_candidate_model.dart';
+import '../models/employee_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../utils/plate_utils.dart';
@@ -14,7 +15,7 @@ class CheckInView extends StatefulWidget {
   const CheckInView({super.key, this.employeeLoader, this.candidateSearcher});
 
   /// Opsional untuk preview/test; produksi memakai ApiService.
-  final Future<List<String>> Function()? employeeLoader;
+  final Future<List<EmployeeItem>> Function()? employeeLoader;
   final Future<List<CheckinCandidate>> Function(String query)?
   candidateSearcher;
 
@@ -35,7 +36,8 @@ class _CheckInViewState extends State<CheckInView> {
   String _jenisKedatangan = 'WALK_IN';
   int? _bookingId;
   String? _selectedPic;
-  List<String> _employeeList = [];
+  EmployeeItem? _selectedEmployee;
+  List<EmployeeItem> _employeeList = [];
   bool _isLoadingEmployees = true;
 
   CheckinCandidate? _selectedCandidate;
@@ -293,7 +295,7 @@ class _CheckInViewState extends State<CheckInView> {
 
   Future<void> _openPicPicker() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<EmployeeItem>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -309,8 +311,9 @@ class _CheckInViewState extends State<CheckInView> {
 
     if (selected != null && mounted) {
       setState(() {
-        _selectedPic = selected;
-        _picController.text = selected;
+        _selectedEmployee = selected;
+        _selectedPic = selected.name;
+        _picController.text = '${selected.name} (${selected.position})';
         _picError = null;
       });
     }
@@ -390,7 +393,7 @@ class _CheckInViewState extends State<CheckInView> {
       keluhan: complaint.isEmpty ? 'Pengecekan umum armada' : complaint,
       petugasSecurity: petugas,
       bookingId: _bookingId,
-      picTujuan: _selectedPic,
+      picTujuan: _selectedEmployee?.name ?? _selectedPic,
       jenisKedatangan: _jenisKedatangan,
       catatanMasuk: notes,
     );
@@ -484,6 +487,7 @@ class _CheckInViewState extends State<CheckInView> {
       _bookingId = null;
       _selectedCandidate = null;
       _selectedPic = null;
+      _selectedEmployee = null;
       _hasSearchedPlate = false;
       _candidates.clear();
       _photos.clear();
@@ -1111,7 +1115,7 @@ class _PicPickerSheet extends StatefulWidget {
     required this.onRetry,
   });
 
-  final List<String> employees;
+  final List<EmployeeItem> employees;
   final bool isLoading;
   final String? selected;
   final VoidCallback onRetry;
@@ -1127,9 +1131,11 @@ class _PicPickerSheetState extends State<_PicPickerSheet> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final texts = Theme.of(context).textTheme;
-    final query = _query.toLowerCase();
+    final query = _query.trim().toLowerCase();
     final filtered = widget.employees
-        .where((name) => name.toLowerCase().contains(query))
+        .where((emp) =>
+            emp.name.toLowerCase().contains(query) ||
+            emp.position.toLowerCase().contains(query))
         .toList();
 
     return SafeArea(
@@ -1240,15 +1246,45 @@ class _PicPickerSheetState extends State<_PicPickerSheet> {
                         const SizedBox(height: AppSpacing.xxs),
                     itemBuilder: (context, index) {
                       final employee = filtered[index];
-                      final isSelected = widget.selected == employee;
+                      final isSelected = widget.selected == employee.name;
                       return ListTile(
-                        leading: InitialsAvatar(name: employee, size: 40),
+                        leading: InitialsAvatar(name: employee.name, size: 40),
                         title: Text(
-                          employee,
+                          employee.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: texts.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scheme.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.xs,
+                                  ),
+                                  border: Border.all(
+                                    color: scheme.primary.withValues(alpha: 0.22),
+                                  ),
+                                ),
+                                child: Text(
+                                  employee.position,
+                                  style: texts.labelSmall?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         trailing: isSelected
