@@ -51,9 +51,8 @@ class StickyBottomBar extends StatelessWidget {
                     Text(
                       hint!,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                   ],

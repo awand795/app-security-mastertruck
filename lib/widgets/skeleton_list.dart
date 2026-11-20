@@ -113,7 +113,8 @@ class _SkeletonListState extends State<SkeletonList>
                 padding: widget.padding,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: children.length,
-                separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, index) => children[index],
               )
             : Padding(

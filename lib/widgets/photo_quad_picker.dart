@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/theme.dart';
+import '../models/set_foto_model.dart';
 
-/// Pemilih foto empat sudut kendaraan.
+/// Pemilih foto kendaraan & supir yang dikonfigurasi dari tabel `set_foto`.
 ///
 /// Setiap kotak dapat difoto ulang dengan mengetuk gambar, atau dihapus lewat
 /// tombol hapus. Progres unggah ditampilkan di dalam komponen agar petugas
@@ -20,9 +21,12 @@ class PhotoQuadPicker extends StatelessWidget {
     this.uploadCurrent,
     this.uploadTotal,
     this.showHeader = false,
+    this.anglesList,
+    this.fotoSettings,
+    this.showExtraButton = true,
   });
 
-  /// 'DEPAN', 'BELAKANG', 'KIRI', 'KANAN' -> base64.
+  /// '<KODE_FOTO>' -> base64.
   final Map<String, String> photos;
   final Function(String angle, String base64) onPhotoCaptured;
   final Function(String angle)? onPhotoRemoved;
@@ -30,13 +34,54 @@ class PhotoQuadPicker extends StatelessWidget {
   final int? uploadCurrent;
   final int? uploadTotal;
   final bool showHeader;
+  final List<Map<String, String>>? anglesList;
+  final List<SetFotoItem>? fotoSettings;
+  final bool showExtraButton;
 
-  static const List<Map<String, String>> angles = [
-    {'key': 'DEPAN', 'label': 'Tampak Depan'},
-    {'key': 'BELAKANG', 'label': 'Tampak Belakang'},
-    {'key': 'KIRI', 'label': 'Sisi Kiri'},
-    {'key': 'KANAN', 'label': 'Sisi Kanan'},
+  static const List<Map<String, String>> checkoutAngles = [
+    {'key': 'TAMPAK_DEPAN', 'label': 'Tampak Depan *'},
+    {'key': 'FOTO_SUPIR', 'label': 'Foto Supir *'},
+    {'key': 'TAMPAK_BELAKANG', 'label': 'Tampak Belakang'},
+    {'key': 'TAMPAK_KIRI', 'label': 'Tampak Kiri'},
+    {'key': 'TAMPAK_KANAN', 'label': 'Tampak Kanan'},
+    {'key': 'FOTO_LAINNYA', 'label': 'Foto Lainnya'},
   ];
+
+  static const List<Map<String, String>> angles = checkoutAngles;
+
+  static bool hasRequiredPhotos(Map<String, String> photos) =>
+      hasRequiredPhotosFor(photos, SetFotoItem.defaultSettings);
+
+  static bool hasRequiredPhotosFor(
+    Map<String, String> photos,
+    List<SetFotoItem> settings,
+  ) {
+    final requiredItems = settings.where((s) => s.isWajib).toList();
+    if (requiredItems.isEmpty) return true;
+    return requiredItems.every(
+      (s) => (photos[s.angleKey]?.isNotEmpty ?? false),
+    );
+  }
+
+  static int requiredUploadedCountFor(
+    Map<String, String> photos,
+    List<SetFotoItem> settings,
+  ) {
+    return settings
+        .where((s) => s.isWajib && (photos[s.angleKey]?.isNotEmpty ?? false))
+        .length;
+  }
+
+  static int requiredTotalCountFor(List<SetFotoItem> settings) =>
+      settings.where((s) => s.isWajib).length;
+
+  String _nextExtraKey() {
+    var idx = 1;
+    while (photos.containsKey('TAMBAHAN_$idx')) {
+      idx++;
+    }
+    return 'TAMBAHAN_$idx';
+  }
 
   Future<void> _takePhoto(BuildContext context, String angle) async {
     final picker = ImagePicker();
@@ -66,7 +111,16 @@ class PhotoQuadPicker extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final semantic = context.semantic;
     final texts = Theme.of(context).textTheme;
-    final count = photos.length.clamp(0, angles.length).toInt();
+    final settings = fotoSettings;
+    final activeAngles = (settings != null && settings.isNotEmpty)
+        ? settings
+              .map((s) => {'key': s.angleKey, 'label': s.displayLabel})
+              .toList()
+        : (anglesList ?? angles);
+    final count = photos.length.clamp(0, activeAngles.length).toInt();
+
+    final extraKeys =
+        photos.keys.where((k) => k.startsWith('TAMBAHAN_')).toList()..sort();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -76,16 +130,19 @@ class PhotoQuadPicker extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Foto Kendaraan',
+                  'Foto Kendaraan & Supir',
                   style: texts.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               Text(
-                '$count/${angles.length}',
+                '${photos.length} foto',
                 style: texts.labelLarge?.copyWith(
-                  color: count == angles.length
+                  color:
+                      (settings != null
+                          ? hasRequiredPhotosFor(photos, settings)
+                          : hasRequiredPhotos(photos))
                       ? semantic.success
                       : scheme.onSurfaceVariant,
                 ),
@@ -95,12 +152,12 @@ class PhotoQuadPicker extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
         ],
         Row(
-          children: List<Widget>.generate(angles.length, (index) {
+          children: List<Widget>.generate(activeAngles.length, (index) {
             final filled = index < count;
             return Expanded(
               child: Padding(
                 padding: EdgeInsets.only(
-                  right: index == angles.length - 1 ? 0 : AppSpacing.xs,
+                  right: index == activeAngles.length - 1 ? 0 : AppSpacing.xs,
                 ),
                 child: AnimatedContainer(
                   duration: AppDurations.normal,
@@ -177,9 +234,9 @@ class PhotoQuadPicker extends StatelessWidget {
                 mainAxisSpacing: AppSpacing.xs,
                 childAspectRatio: columns == 4 ? 1.15 : 1.28,
               ),
-              itemCount: angles.length,
+              itemCount: activeAngles.length,
               itemBuilder: (context, index) {
-                final item = angles[index];
+                final item = activeAngles[index];
                 final key = item['key']!;
                 final label = item['label']!;
                 final photo = photos[key];
@@ -205,6 +262,58 @@ class PhotoQuadPicker extends StatelessWidget {
             );
           },
         ),
+        if (extraKeys.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 560 ? 4 : 2;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: AppSpacing.xs,
+                  mainAxisSpacing: AppSpacing.xs,
+                  childAspectRatio: columns == 4 ? 1.15 : 1.28,
+                ),
+                itemCount: extraKeys.length,
+                itemBuilder: (context, index) {
+                  final key = extraKeys[index];
+                  final label = 'Tambahan #${index + 1}';
+                  return _FilledPhotoTile(
+                    label: label,
+                    photo: photos[key]!,
+                    enabled: enabled,
+                    onRetake: () => _takePhoto(context, key),
+                    onRemove: onPhotoRemoved == null
+                        ? null
+                        : () => onPhotoRemoved!(key),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+        if (showExtraButton) ...[
+          const SizedBox(height: AppSpacing.sm),
+          OutlinedButton.icon(
+            onPressed: enabled
+                ? () => _takePhoto(context, _nextExtraKey())
+                : null,
+            icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+            label: Text(
+              extraKeys.isEmpty
+                  ? 'Tambah Foto Tambahan'
+                  : 'Tambah Foto Tambahan (${extraKeys.length})',
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -225,6 +334,12 @@ class _EmptyPhotoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final texts = Theme.of(context).textTheme;
+    final isRequired = label.endsWith('*');
+    final cleanLabel = isRequired
+        ? label.substring(0, label.length - 1).trim()
+        : label;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dashColor = isDark ? scheme.outline : const Color(0xFFB8C4E4);
 
     return Semantics(
       button: enabled,
@@ -233,50 +348,65 @@ class _EmptyPhotoTile extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainer,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: CustomPaint(
+            painter: _DashedRectPainter(color: dashColor, radius: AppRadius.md),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add_a_photo_outlined,
+                        size: 20,
+                        color: scheme.primary,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.add_a_photo_outlined,
-                      size: 20,
-                      color: scheme.onPrimaryContainer,
+                    const SizedBox(height: AppSpacing.xs),
+                    Text.rich(
+                      TextSpan(
+                        text: cleanLabel,
+                        style: texts.labelMedium?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        children: isRequired
+                            ? [
+                                TextSpan(
+                                  text: ' *',
+                                  style: TextStyle(
+                                    color: scheme.error,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ]
+                            : const [],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: texts.labelLarge?.copyWith(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w700,
+                    const SizedBox(height: 2),
+                    Text(
+                      'Ambil foto',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: texts.bodySmall?.copyWith(color: scheme.primary),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Ambil foto',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: texts.bodySmall?.copyWith(color: scheme.primary),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -284,6 +414,41 @@ class _EmptyPhotoTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DashedRectPainter extends CustomPainter {
+  const _DashedRectPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var dist = 0.0;
+      while (dist < metric.length) {
+        final len = (dist + dashWidth).clamp(0.0, metric.length) - dist;
+        canvas.drawPath(metric.extractPath(dist, dist + len), paint);
+        dist += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRectPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
 class _FilledPhotoTile extends StatelessWidget {

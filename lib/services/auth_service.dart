@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../config/api_config.dart';
+import '../models/gate_model.dart';
 
 class UserSession {
   final String userId;
@@ -12,6 +15,10 @@ class UserSession {
   final String? role;
   final String? kodeCabang;
   final String? namaCabang;
+  final int? gateId;
+  final String? gateCode;
+  final String? gateName;
+  final DateTime? lastLoginAt;
 
   UserSession({
     required this.userId,
@@ -21,6 +28,10 @@ class UserSession {
     this.role,
     this.kodeCabang,
     this.namaCabang,
+    this.gateId,
+    this.gateCode,
+    this.gateName,
+    this.lastLoginAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +42,10 @@ class UserSession {
     'role': role,
     'kodeCabang': kodeCabang,
     'namaCabang': namaCabang,
+    'gateId': gateId,
+    'gateCode': gateCode,
+    'gateName': gateName,
+    'lastLoginAt': lastLoginAt?.toIso8601String(),
   };
 
   factory UserSession.fromJson(Map<String, dynamic> json) => UserSession(
@@ -41,15 +56,53 @@ class UserSession {
     role: json['role'],
     kodeCabang: json['kodeCabang'],
     namaCabang: json['namaCabang'],
+    gateId: json['gateId'] is int
+        ? json['gateId'] as int
+        : int.tryParse(json['gateId']?.toString() ?? ''),
+    gateCode: json['gateCode']?.toString(),
+    gateName: json['gateName']?.toString(),
+    lastLoginAt: json['lastLoginAt'] != null
+        ? DateTime.tryParse(json['lastLoginAt'].toString())
+        : null,
   );
 }
 
 class AuthService {
   static const String _sessionKey = 'security_user_session';
+  static const Duration sessionMaxAge = Duration(days: 2);
   static UserSession? _currentSession;
 
   static UserSession? get currentSession => _currentSession;
   static bool get isAuthenticated => _currentSession != null;
+  static bool get hasGate => _currentSession?.gateId != null;
+
+  static bool isSessionExpired({DateTime? now}) {
+    final loginAt = _currentSession?.lastLoginAt;
+    if (loginAt == null) return false;
+    final ref = now ?? DateTime.now();
+    return ref.difference(loginAt) >= sessionMaxAge;
+  }
+
+  static Future<void> setSelectedGate(GateModel gate) async {
+    final cur = _currentSession;
+    if (cur == null) return;
+    final updated = UserSession(
+      userId: cur.userId,
+      name: cur.name,
+      idToken: cur.idToken,
+      sessionId: cur.sessionId,
+      role: cur.role,
+      kodeCabang: cur.kodeCabang,
+      namaCabang: cur.namaCabang,
+      gateId: gate.id,
+      gateCode: gate.kodeGate,
+      gateName: gate.namaGate,
+      lastLoginAt: cur.lastLoginAt,
+    );
+    _currentSession = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionKey, jsonEncode(updated.toJson()));
+  }
 
   static Future<void> loadSession() async {
     final prefs = await SharedPreferences.getInstance();
@@ -57,6 +110,10 @@ class AuthService {
     if (raw != null) {
       try {
         _currentSession = UserSession.fromJson(jsonDecode(raw));
+        if (isSessionExpired()) {
+          _currentSession = null;
+          await prefs.remove(_sessionKey);
+        }
       } catch (_) {
         _currentSession = null;
       }
@@ -67,37 +124,42 @@ class AuthService {
     required String userId,
     required String password,
     String company = 'LPM',
+    GateModel? gate,
   }) async {
     final url = Uri.parse('${ApiConfig.darkoPosBaseUrl}/api/v1/users/login');
 
     try {
-      var res = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ApiConfig.darkoPosApiKey,
-        },
-        body: jsonEncode({
-          'userid': userId,
-          'password': password,
-          'company': company,
-        }),
-      ).timeout(const Duration(seconds: 10));
+      var res = await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ApiConfig.darkoPosApiKey,
+            },
+            body: jsonEncode({
+              'userid': userId,
+              'password': password,
+              'company': company,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       // Jika 401 dan company terisi, coba fallback tanpa company persis seperti di portal web
       if (res.statusCode == 401 && company.isNotEmpty) {
-        res = await http.post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': ApiConfig.darkoPosApiKey,
-          },
-          body: jsonEncode({
-            'userid': userId,
-            'password': password,
-            'company': '',
-          }),
-        ).timeout(const Duration(seconds: 10));
+        res = await http
+            .post(
+              url,
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': ApiConfig.darkoPosApiKey,
+              },
+              body: jsonEncode({
+                'userid': userId,
+                'password': password,
+                'company': '',
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
       }
 
       // Bila respons 401 Unauthorized, jangan lakukan jsonDecode dan jangan tampilkan exception teknis
@@ -111,7 +173,8 @@ class AuthService {
       if (res.statusCode == 403) {
         return {
           'success': false,
-          'message': 'Akun Anda tidak memiliki izin akses ke portal keamanan gerbang.',
+          'message':
+              'Akun Anda tidak memiliki izin akses ke portal keamanan gerbang.',
         };
       }
 
@@ -146,7 +209,9 @@ class AuthService {
         };
       }
 
-      if (data['token'] != null || data['idToken'] != null || data['success'] == true) {
+      if (data['token'] != null ||
+          data['idToken'] != null ||
+          data['success'] == true) {
         final idToken = data['idToken'] ?? data['token'];
         final sessionId = data['sessionId'];
         final name = data['name'] ?? data['fullname'] ?? userId;
@@ -157,6 +222,10 @@ class AuthService {
           idToken: idToken?.toString(),
           sessionId: sessionId?.toString(),
           role: data['role']?.toString() ?? 'SECURITY',
+          gateId: gate?.id,
+          gateCode: gate?.kodeGate,
+          gateName: gate?.namaGate,
+          lastLoginAt: DateTime.now(),
         );
 
         _currentSession = session;
@@ -189,15 +258,19 @@ class AuthService {
 
     if (token != null) {
       try {
-        final url = Uri.parse('${ApiConfig.darkoPosBaseUrl}/api/v1/users/logout');
-        await http.post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'JWT $token',
-          },
-          body: jsonEncode({'sessionId': sessionId ?? ''}),
-        ).timeout(const Duration(seconds: 5));
+        final url = Uri.parse(
+          '${ApiConfig.darkoPosBaseUrl}/api/v1/users/logout',
+        );
+        await http
+            .post(
+              url,
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'JWT $token',
+              },
+              body: jsonEncode({'sessionId': sessionId ?? ''}),
+            )
+            .timeout(const Duration(seconds: 5));
       } catch (_) {}
     }
 

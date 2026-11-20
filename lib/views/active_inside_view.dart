@@ -4,9 +4,10 @@ import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../models/active_vehicle_model.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
 
-enum _InsideFilter { all, ready, progress }
+enum _InsideFilter { all, inside, tempOut }
 
 /// Daftar kendaraan yang masih berada di dalam bengkel.
 ///
@@ -121,14 +122,34 @@ class _ActiveInsideViewState extends State<ActiveInsideView> {
     switch (_filter) {
       case _InsideFilter.all:
         return _vehicles;
-      case _InsideFilter.ready:
-        return _vehicles.where((v) => v.isSiapKeluar).toList();
-      case _InsideFilter.progress:
-        return _vehicles.where((v) => !v.isSiapKeluar).toList();
+      case _InsideFilter.inside:
+        return _vehicles.where((v) => !v.isKeluarSementara).toList();
+      case _InsideFilter.tempOut:
+        return _vehicles.where((v) => v.isKeluarSementara).toList();
     }
   }
 
-  int get _readyCount => _vehicles.where((v) => v.isSiapKeluar).length;
+  int get _tempOutCount => _vehicles.where((v) => v.isKeluarSementara).length;
+  int get _insideCount => _vehicles.where((v) => !v.isKeluarSementara).length;
+
+  Future<void> _handleReEnter(ActiveVehicle vehicle) async {
+    final session = AuthService.currentSession;
+    final res = await ApiService.postReEnter(
+      kunjunganId: vehicle.id,
+      petugasSecurity: session?.name ?? 'Pos Security',
+      gateMasukId: session?.gateId,
+      gateMasukName: session?.gateName,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res['message']?.toString() ?? 'Berhasil masuk kembali.'),
+      ),
+    );
+    if (res['success'] == true) {
+      _loadData(query: _query, showSearching: false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,10 +192,10 @@ class _ActiveInsideViewState extends State<ActiveInsideView> {
                         ),
                       ),
                       Text(
-                        '$_readyCount siap keluar',
+                        '$_insideCount di bengkel · $_tempOutCount keluar sementara',
                         style: texts.bodySmall?.copyWith(
-                          color: _readyCount > 0
-                              ? semantic.success
+                          color: _tempOutCount > 0
+                              ? semantic.warning
                               : scheme.onSurfaceVariant,
                           fontWeight: FontWeight.w600,
                         ),
@@ -187,19 +208,19 @@ class _ActiveInsideViewState extends State<ActiveInsideView> {
                     runSpacing: AppSpacing.xs,
                     children: [
                       _buildFilterChip(
-                        label: 'Semua',
+                        label: 'Semua (${_vehicles.length})',
                         selected: _filter == _InsideFilter.all,
                         onSelected: () => _selectFilter(_InsideFilter.all),
                       ),
                       _buildFilterChip(
-                        label: 'Siap keluar',
-                        selected: _filter == _InsideFilter.ready,
-                        onSelected: () => _selectFilter(_InsideFilter.ready),
+                        label: 'Di Bengkel ($_insideCount)',
+                        selected: _filter == _InsideFilter.inside,
+                        onSelected: () => _selectFilter(_InsideFilter.inside),
                       ),
                       _buildFilterChip(
-                        label: 'Pengerjaan',
-                        selected: _filter == _InsideFilter.progress,
-                        onSelected: () => _selectFilter(_InsideFilter.progress),
+                        label: 'Keluar Sementara ($_tempOutCount)',
+                        selected: _filter == _InsideFilter.tempOut,
+                        onSelected: () => _selectFilter(_InsideFilter.tempOut),
                       ),
                     ],
                   ),
@@ -252,7 +273,12 @@ class _ActiveInsideViewState extends State<ActiveInsideView> {
                             child: _ActiveVehicleCard(
                               vehicle: vehicle,
                               now: now,
-                              onCheckout: widget.onNavigateToCheckout == null
+                              onReEnter: vehicle.isKeluarSementara
+                                  ? () => _handleReEnter(vehicle)
+                                  : null,
+                              onCheckout:
+                                  widget.onNavigateToCheckout == null ||
+                                      vehicle.isKeluarSementara
                                   ? null
                                   : () => widget.onNavigateToCheckout!(
                                       vehicle.noPolisi,
@@ -349,11 +375,13 @@ class _ActiveVehicleCard extends StatelessWidget {
     required this.vehicle,
     required this.now,
     this.onCheckout,
+    this.onReEnter,
   });
 
   final ActiveVehicle vehicle;
   final DateTime now;
   final VoidCallback? onCheckout;
+  final VoidCallback? onReEnter;
 
   @override
   Widget build(BuildContext context) {
@@ -361,6 +389,7 @@ class _ActiveVehicleCard extends StatelessWidget {
     final semantic = context.semantic;
     final texts = Theme.of(context).textTheme;
     final ready = vehicle.isSiapKeluar;
+    final isTempOut = vehicle.isKeluarSementara;
     final driver = vehicle.namaPengemudi?.trim();
     final customer = vehicle.namaPelanggan?.trim();
     final complaint = vehicle.keluhan?.trim();
@@ -368,11 +397,11 @@ class _ActiveVehicleCard extends StatelessWidget {
         ? '-'
         : DateFormat('HH:mm').format(vehicle.waktuCheckIn!);
     final duration = _formatDuration(vehicle.waktuCheckIn, now);
-    final statusLabel = ready
-        ? 'Siap keluar'
-        : (vehicle.statusServis?.trim().isNotEmpty == true
-              ? vehicle.statusServis!.trim()
-              : 'Pengerjaan');
+    final statusLabel = isTempOut
+        ? 'Keluar Sementara'
+        : (vehicle.isServicePengerjaan && vehicle.hasWo
+              ? (vehicle.hasFir ? 'FIR Siap' : 'Belum FIR')
+              : (vehicle.subTujuan ?? vehicle.tipeKunjungan ?? 'Di Bengkel'));
 
     return AppCard(
       accentColor: ready ? semantic.success : semantic.warning,
@@ -487,17 +516,45 @@ class _ActiveVehicleCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'Tiket ${vehicle.nomorTiket ?? '-'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: texts.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tiket ${vehicle.nomorTiket ?? '-'}'
+                      '${vehicle.gateMasukNama != null ? ' · ${vehicle.gateMasukNama}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: texts.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (isTempOut &&
+                        vehicle.alasanKeluar != null &&
+                        vehicle.alasanKeluar!.isNotEmpty)
+                      Text(
+                        'Alasan: ${vehicle.alasanKeluar}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: texts.bodySmall?.copyWith(
+                          color: semantic.warning,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (onCheckout != null) ...[
+              if (onReEnter != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                AppButton(
+                  label: 'Masuk Kembali',
+                  icon: Icons.login_rounded,
+                  variant: AppButtonVariant.primary,
+                  size: AppButtonSize.medium,
+                  expanded: false,
+                  onPressed: onReEnter,
+                ),
+              ] else if (onCheckout != null) ...[
                 const SizedBox(width: AppSpacing.xs),
                 AppButton(
                   label: 'Proses Keluar',

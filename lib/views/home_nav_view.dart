@@ -46,7 +46,7 @@ class HomeNavView extends StatefulWidget {
   State<HomeNavView> createState() => _HomeNavViewState();
 }
 
-class _HomeNavViewState extends State<HomeNavView> {
+class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
   static const _titles = [
     'Beranda',
     'Kendaraan Masuk',
@@ -59,7 +59,7 @@ class _HomeNavViewState extends State<HomeNavView> {
     '',
     'Catat kendaraan yang masuk gerbang',
     'Pantau armada yang masih di bengkel',
-    'Validasi invoice dan terbitkan gate pass',
+    'Validasi lokasi, FIR (MT), dan terbitkan gate pass',
     'Riwayat gate pass kendaraan keluar',
   ];
 
@@ -67,8 +67,86 @@ class _HomeNavViewState extends State<HomeNavView> {
   int _berandaRefreshToken = 0;
   String? _checkoutTargetPlate;
   final Set<int> _visitedTabs = {0};
+  final ValueNotifier<Widget?> _checkInCtaNotifier = ValueNotifier<Widget?>(
+    null,
+  );
+  final ValueNotifier<Widget?> _checkOutCtaNotifier = ValueNotifier<Widget?>(
+    null,
+  );
+
+  static const _navItems = [
+    BottomNavItem(
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+      label: 'Beranda',
+    ),
+    BottomNavItem(
+      icon: Icons.login_outlined,
+      selectedIcon: Icons.login_rounded,
+      label: 'Masuk',
+    ),
+    BottomNavItem(
+      icon: Icons.local_shipping_outlined,
+      selectedIcon: Icons.local_shipping_rounded,
+      label: 'Di Dalam',
+    ),
+    BottomNavItem(
+      icon: Icons.exit_to_app_outlined,
+      selectedIcon: Icons.exit_to_app_rounded,
+      label: 'Keluar',
+    ),
+    BottomNavItem(
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long_rounded,
+      label: 'Riwayat',
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_checkSessionExpiry());
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkSessionExpiry());
+    }
+  }
+
+  Future<bool> _checkSessionExpiry() async {
+    final now = widget.clock?.call();
+    if (!AuthService.isSessionExpired(now: now)) return false;
+    await AuthService.logout();
+    if (!mounted) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Sesi login sudah melewati 2 hari. Silakan login kembali.',
+        ),
+      ),
+    );
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginView()),
+      (_) => false,
+    );
+    return true;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _checkInCtaNotifier.dispose();
+    _checkOutCtaNotifier.dispose();
+    super.dispose();
+  }
 
   void _selectTab(int index) {
+    unawaited(_checkSessionExpiry());
     if (_currentIndex == index) {
       if (index == 0) {
         setState(() => _berandaRefreshToken++);
@@ -222,6 +300,7 @@ class _HomeNavViewState extends State<HomeNavView> {
         return CheckInView(
           employeeLoader: widget.checkInEmployeeLoader,
           candidateSearcher: widget.checkInCandidateSearcher,
+          dockCtaNotifier: _checkInCtaNotifier,
         );
       case 2:
         return ActiveInsideView(
@@ -236,6 +315,7 @@ class _HomeNavViewState extends State<HomeNavView> {
           ),
           initialPlate: _checkoutTargetPlate ?? widget.initialCheckoutPlate,
           vehicleLoader: widget.checkOutVehicleLoader,
+          dockCtaNotifier: _checkOutCtaNotifier,
           onClearInitialPlate: () =>
               setState(() => _checkoutTargetPlate = null),
         );
@@ -279,47 +359,31 @@ class _HomeNavViewState extends State<HomeNavView> {
           ],
         ),
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(top: BorderSide(color: scheme.outlineVariant)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: _selectTab,
-            backgroundColor: scheme.surface,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Beranda',
+      bottomNavigationBar: _currentIndex == 1
+          ? ValueListenableBuilder<Widget?>(
+              valueListenable: _checkInCtaNotifier,
+              builder: (_, cta, __) => BottomDock(
+                items: _navItems,
+                currentIndex: _currentIndex,
+                onTabSelected: _selectTab,
+                cta: cta,
               ),
-              NavigationDestination(
-                icon: Icon(Icons.login_outlined),
-                selectedIcon: Icon(Icons.login_rounded),
-                label: 'Masuk',
+            )
+          : _currentIndex == 3
+          ? ValueListenableBuilder<Widget?>(
+              valueListenable: _checkOutCtaNotifier,
+              builder: (_, cta, __) => BottomDock(
+                items: _navItems,
+                currentIndex: _currentIndex,
+                onTabSelected: _selectTab,
+                cta: cta,
               ),
-              NavigationDestination(
-                icon: Icon(Icons.local_shipping_outlined),
-                selectedIcon: Icon(Icons.local_shipping_rounded),
-                label: 'Di Dalam',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.exit_to_app_outlined),
-                selectedIcon: Icon(Icons.exit_to_app_rounded),
-                label: 'Keluar',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.receipt_long_outlined),
-                selectedIcon: Icon(Icons.receipt_long_rounded),
-                label: 'Riwayat',
-              ),
-            ],
-          ),
-        ),
-      ),
+            )
+          : BottomDock(
+              items: _navItems,
+              currentIndex: _currentIndex,
+              onTabSelected: _selectTab,
+            ),
     );
   }
 }

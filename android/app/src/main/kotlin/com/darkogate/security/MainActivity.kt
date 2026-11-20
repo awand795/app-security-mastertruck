@@ -1,4 +1,4 @@
-package com.mastertruck.security.bengkel_kim3_security_app
+package com.darkogate.security
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -271,8 +271,7 @@ class _TodayExitViewState extends State<TodayExitView> {
     return EmptyState(
       icon: Icons.receipt_long_outlined,
       title: 'Belum ada kendaraan keluar hari ini',
-      message:
-          'Memo gate pass hari ini akan muncul di sini setelah kendaraan check-out.',
+      message: 'Memo gate pass hari ini akan muncul di sini setelah kendaraan check-out.',
       actionLabel: 'Muat ulang',
       actionIcon: Icons.refresh_rounded,
       onAction: () => _loadData(showSkeleton: true, showSearching: false),

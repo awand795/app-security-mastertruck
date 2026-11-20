@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/booking_candidate_model.dart';
 import '../models/employee_model.dart';
+import '../models/lokasi_model.dart';
+import '../models/set_foto_model.dart';
+import '../models/tujuan_kedatangan_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/app_widgets.dart';
@@ -12,12 +16,27 @@ import '../widgets/gate_pass_dialog.dart';
 import '../widgets/photo_quad_picker.dart';
 
 class CheckInView extends StatefulWidget {
-  const CheckInView({super.key, this.employeeLoader, this.candidateSearcher});
+  const CheckInView({
+    super.key,
+    this.employeeLoader,
+    this.candidateSearcher,
+    this.lokasiLoader,
+    this.tujuanLoader,
+    this.setFotoLoader,
+    this.locationValidator,
+    this.dockCtaNotifier,
+  });
 
   /// Opsional untuk preview/test; produksi memakai ApiService.
   final Future<List<EmployeeItem>> Function()? employeeLoader;
   final Future<List<CheckinCandidate>> Function(String query)?
   candidateSearcher;
+  final Future<List<LokasiItem>> Function()? lokasiLoader;
+  final Future<List<TujuanKedatanganItem>> Function()? tujuanLoader;
+  final Future<List<SetFotoItem>> Function()? setFotoLoader;
+  final Future<LocationCheckResult> Function(LokasiItem lokasi)?
+  locationValidator;
+  final ValueNotifier<Widget?>? dockCtaNotifier;
 
   @override
   State<CheckInView> createState() => _CheckInViewState();
@@ -32,13 +51,24 @@ class _CheckInViewState extends State<CheckInView> {
   final _customTipeController = TextEditingController();
   final _picController = TextEditingController();
 
-  String _tipeKunjungan = 'Service';
+  String _kategoriTujuan = 'SERVICE';
+  String _subTujuan = 'SERVICE';
   String _jenisKedatangan = 'WALK_IN';
   int? _bookingId;
   String? _selectedPic;
   EmployeeItem? _selectedEmployee;
   List<EmployeeItem> _employeeList = [];
   bool _isLoadingEmployees = true;
+
+  List<LokasiItem> _lokasiList = [];
+  LokasiItem? _selectedLokasi;
+  bool _isLoadingLokasi = true;
+
+  List<TujuanKedatanganItem> _tujuanList = [];
+  TujuanKedatanganItem? _selectedTujuan;
+  bool _isLoadingTujuan = true;
+
+  List<SetFotoItem> _fotoSettings = SetFotoItem.defaultSettings;
 
   CheckinCandidate? _selectedCandidate;
   List<CheckinCandidate> _candidates = [];
@@ -51,15 +81,46 @@ class _CheckInViewState extends State<CheckInView> {
   int? _uploadTotal;
 
   String? _plateError;
+  String? _lokasiError;
+  String? _tujuanError;
   String? _driverError;
+  String? _phoneError;
   String? _picError;
 
-  static const _tipeOptions = ['Service', 'Kunjungan', 'Beli Part', 'Lainnya'];
+  static const _fallbackLokasi = [
+    LokasiItem(id: 1, kodeLokasi: 'MT', namaLokasi: 'Bengkel'),
+    LokasiItem(id: 2, kodeLokasi: 'G1', namaLokasi: 'Gudang 1'),
+    LokasiItem(id: 3, kodeLokasi: 'G2', namaLokasi: 'Gudang 2'),
+  ];
+
+  static const _fallbackTujuan = [
+    TujuanKedatanganItem(
+      id: 1,
+      kodeTujuan: 'SERVICE',
+      namaTujuan: 'Service',
+      urutan: 1,
+    ),
+    TujuanKedatanganItem(
+      id: 2,
+      kodeTujuan: 'KUNJUNGAN',
+      namaTujuan: 'Kunjungan',
+      urutan: 2,
+    ),
+    TujuanKedatanganItem(
+      id: 3,
+      kodeTujuan: 'BELI_SPAREPART',
+      namaTujuan: 'Beli Sparepart',
+      urutan: 3,
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadEmployees();
+    _loadLokasi();
+    _loadTujuanKedatangan();
+    _loadSetFoto();
   }
 
   @override
@@ -87,6 +148,70 @@ class _CheckInViewState extends State<CheckInView> {
       if (!mounted) return;
       setState(() => _isLoadingEmployees = false);
     }
+  }
+
+  Future<void> _loadLokasi() async {
+    try {
+      final loader = widget.lokasiLoader ?? ApiService.getLokasi;
+      final list = await loader();
+      if (!mounted) return;
+      final items = list.isNotEmpty ? list : _fallbackLokasi;
+      setState(() {
+        _lokasiList = items;
+        _selectedLokasi = items.firstWhere(
+          (e) => e.isBengkelMt,
+          orElse: () => items.first,
+        );
+        _isLoadingLokasi = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _lokasiList = _fallbackLokasi;
+        _selectedLokasi = _fallbackLokasi.first;
+        _isLoadingLokasi = false;
+      });
+    }
+  }
+
+  Future<void> _loadTujuanKedatangan() async {
+    try {
+      final loader = widget.tujuanLoader ?? ApiService.getTujuanKedatangan;
+      final list = await loader();
+      if (!mounted) return;
+      final items = list.isNotEmpty ? list : _fallbackTujuan;
+      setState(() {
+        _tujuanList = items;
+        if (_selectedTujuan == null && items.isNotEmpty) {
+          _selectedTujuan = items.first;
+          _kategoriTujuan = items.first.kodeTujuan;
+          _subTujuan = items.first.kodeTujuan;
+        }
+        _isLoadingTujuan = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _tujuanList = _fallbackTujuan;
+        if (_selectedTujuan == null) {
+          _selectedTujuan = _fallbackTujuan.first;
+          _kategoriTujuan = _fallbackTujuan.first.kodeTujuan;
+          _subTujuan = _fallbackTujuan.first.kodeTujuan;
+        }
+        _isLoadingTujuan = false;
+      });
+    }
+  }
+
+  Future<void> _loadSetFoto() async {
+    try {
+      final loader = widget.setFotoLoader ?? ApiService.getSetFoto;
+      final list = await loader();
+      if (!mounted) return;
+      if (list.isNotEmpty) {
+        setState(() => _fotoSettings = list);
+      }
+    } catch (_) {}
   }
 
   void _openAnprScanner() {
@@ -193,10 +318,17 @@ class _CheckInViewState extends State<CheckInView> {
       }
 
       if (candidate.source == 'BOOKING') {
-        _tipeKunjungan = candidate.mappedTipeKunjungan;
-        if (_tipeKunjungan == 'Lainnya' && candidate.jenisLayanan != null) {
-          _customTipeController.text = candidate.jenisLayanan!;
-        }
+        final serviceItem = _tujuanList
+            .cast<TujuanKedatanganItem?>()
+            .firstWhere(
+              (t) => t?.kodeTujuan == 'SERVICE',
+              orElse: () => _tujuanList.isNotEmpty ? _tujuanList.first : null,
+            );
+        _selectedTujuan = serviceItem;
+        _customTipeController.clear();
+        _kategoriTujuan = serviceItem?.kodeTujuan ?? 'SERVICE';
+        _subTujuan = serviceItem?.kodeTujuan ?? 'SERVICE';
+        _tujuanError = null;
       }
     });
 
@@ -353,30 +485,65 @@ class _CheckInViewState extends State<CheckInView> {
     final phone = _driverPhoneController.text.trim();
     final complaint = _complaintController.text.trim();
     final notes = _notesController.text.trim();
+    final customTujuan = _customTipeController.text.trim();
+    final hasCustomTujuan = customTujuan.isNotEmpty;
 
     final plateError = !isValidPlate(cleanPlate)
         ? kPlateStandardErrorMessage
         : null;
+    final lokasiError = _selectedLokasi == null
+        ? 'Pilih lokasi check-in terlebih dahulu.'
+        : null;
+    final tujuanError = !hasCustomTujuan && _selectedTujuan == null
+        ? 'Pilih tujuan kedatangan atau isi tujuan lainnya.'
+        : null;
     final driverError = driver.isEmpty ? 'Nama pengemudi wajib diisi.' : null;
-    final picError = (_selectedPic == null || _selectedPic!.isEmpty)
-        ? 'Pilih PIC tujuan.'
+    final phoneError = phone.isEmpty ? 'Nomor telepon wajib diisi.' : null;
+    final manualPic = _picController.text.trim();
+    final effectivePic = hasCustomTujuan
+        ? manualPic
+        : (_selectedEmployee?.name ?? _selectedPic ?? '');
+    final picError = effectivePic.isEmpty
+        ? (hasCustomTujuan
+              ? 'Nama PIC tujuan wajib diisi.'
+              : 'Pilih PIC tujuan.')
         : null;
 
-    if (plateError != null || driverError != null || picError != null) {
+    if (plateError != null ||
+        lokasiError != null ||
+        tujuanError != null ||
+        driverError != null ||
+        phoneError != null ||
+        picError != null) {
       setState(() {
         _plateError = plateError;
+        _lokasiError = lokasiError;
+        _tujuanError = tujuanError;
         _driverError = driverError;
+        _phoneError = phoneError;
         _picError = picError;
       });
-      _showSnackBar(plateError ?? 'Lengkapi data bertanda * terlebih dahulu.');
+      _showSnackBar(
+        plateError ??
+            lokasiError ??
+            tujuanError ??
+            phoneError ??
+            picError ??
+            'Lengkapi data bertanda * terlebih dahulu.',
+      );
       return;
     }
 
-    final effectiveTipe = _tipeKunjungan == 'Lainnya'
-        ? (_customTipeController.text.trim().isNotEmpty
-              ? _customTipeController.text.trim()
-              : 'Lainnya')
-        : _tipeKunjungan;
+    if (!PhotoQuadPicker.hasRequiredPhotosFor(_photos, _fotoSettings)) {
+      final requiredLabels = _fotoSettings
+          .where((s) => s.isWajib)
+          .map((s) => s.namaFoto)
+          .join(', ');
+      _showSnackBar(
+        'Foto wajib ($requiredLabels) harus diambil terlebih dahulu.',
+      );
+      return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -384,18 +551,47 @@ class _CheckInViewState extends State<CheckInView> {
       _uploadTotal = null;
     });
 
-    final petugas = AuthService.currentSession?.name ?? 'Pos Security KIM 3';
+    final selectedLokasi = _selectedLokasi!;
+    if (selectedLokasi.cekLokasi) {
+      final validator =
+          widget.locationValidator ?? LocationService.validateLokasiPosition;
+      final locCheck = await validator(selectedLokasi);
+      if (!mounted) return;
+      if (!locCheck.allowed) {
+        setState(() {
+          _isSubmitting = false;
+          _lokasiError = locCheck.message;
+        });
+        _showSnackBar(locCheck.message ?? 'Posisi di luar area lokasi.');
+        return;
+      }
+    }
+
+    final effectiveTipe = hasCustomTujuan
+        ? 'LAINNYA'
+        : _selectedTujuan!.kodeTujuan;
+    final effectiveSubTujuan = hasCustomTujuan
+        ? customTujuan
+        : _selectedTujuan!.kodeTujuan;
+
+    final session = AuthService.currentSession;
+    final petugas = session?.name ?? 'Pos Security KIM 3';
     final res = await ApiService.postCheckIn(
       noPolisi: cleanPlate,
       namaPengemudi: driver,
       noTeleponPengemudi: phone,
       tipeKunjungan: effectiveTipe,
+      subTujuan: effectiveSubTujuan,
       keluhan: complaint.isEmpty ? 'Pengecekan umum armada' : complaint,
       petugasSecurity: petugas,
       bookingId: _bookingId,
-      picTujuan: _selectedEmployee?.name ?? _selectedPic,
+      picTujuan: effectivePic,
       jenisKedatangan: _jenisKedatangan,
       catatanMasuk: notes,
+      gateMasukId: session?.gateId,
+      gateMasukName: session?.gateName,
+      lokasiKode: selectedLokasi.kodeLokasi,
+      lokasiNama: selectedLokasi.namaLokasi,
     );
 
     if (!mounted) return;
@@ -451,7 +647,7 @@ class _CheckInViewState extends State<CheckInView> {
           nomorTiket: nomorTiket,
           noPolisi: formatPlate(cleanPlate),
           namaPengemudi: driver,
-          tipeKunjungan: effectiveTipe,
+          tipeKunjungan: _kategoriTujuan == 'UMUM' ? 'Umum' : _subTujuan,
           keluhan: complaint.isEmpty ? 'Pengecekan armada' : complaint,
           waktuMasuk: 'Baru Saja',
           petugasSecurity: petugas,
@@ -482,12 +678,16 @@ class _CheckInViewState extends State<CheckInView> {
       _notesController.clear();
       _customTipeController.clear();
       _picController.clear();
-      _tipeKunjungan = 'Service';
+      _kategoriTujuan = 'SERVICE';
+      _subTujuan = 'SERVICE';
       _jenisKedatangan = 'WALK_IN';
       _bookingId = null;
       _selectedCandidate = null;
       _selectedPic = null;
       _selectedEmployee = null;
+      _selectedTujuan = _tujuanList.isNotEmpty ? _tujuanList.first : null;
+      _kategoriTujuan = _selectedTujuan?.kodeTujuan ?? 'SERVICE';
+      _subTujuan = _selectedTujuan?.kodeTujuan ?? 'SERVICE';
       _hasSearchedPlate = false;
       _candidates.clear();
       _photos.clear();
@@ -495,7 +695,10 @@ class _CheckInViewState extends State<CheckInView> {
       _uploadCurrent = null;
       _uploadTotal = null;
       _plateError = null;
+      _lokasiError = null;
+      _tujuanError = null;
       _driverError = null;
+      _phoneError = null;
       _picError = null;
     });
   }
@@ -512,12 +715,30 @@ class _CheckInViewState extends State<CheckInView> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final semantic = context.semantic;
     final texts = Theme.of(context).textTheme;
-    final photoCount = _photos.length.clamp(0, 4).toInt();
     final uploadLabel = _uploadCurrent != null && _uploadTotal != null
         ? 'Mengunggah foto $_uploadCurrent/$_uploadTotal'
         : null;
+    final hasCustomTujuan = _customTipeController.text.trim().isNotEmpty;
+    final requiredCount = PhotoQuadPicker.requiredUploadedCountFor(
+      _photos,
+      _fotoSettings,
+    );
+    final totalRequired = PhotoQuadPicker.requiredTotalCountFor(_fotoSettings);
+
+    final ctaButton = AppButton(
+      label: 'Konfirmasi Check-In',
+      icon: Icons.check_circle_outline_rounded,
+      loading: _isSubmitting,
+      loadingLabel: uploadLabel ?? 'Memproses check-in',
+      onPressed: _isSubmitting ? null : _handleSubmitCheckIn,
+    );
+
+    if (widget.dockCtaNotifier != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.dockCtaNotifier!.value = ctaButton;
+      });
+    }
 
     return Column(
       children: [
@@ -535,139 +756,171 @@ class _CheckInViewState extends State<CheckInView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SectionHeader(
-                      title: 'Nomor Polisi',
+                    SectionCard(
+                      stepNumber: 1,
+                      title: 'Nomor polisi',
                       subtitle: 'Scan kamera atau ketik manual',
-                      icon: Icons.directions_car_rounded,
                       trailing: _hasSearchedPlate || _selectedCandidate != null
                           ? StatusChip(
                               _statusFor(_selectedCandidate),
                               compact: true,
                             )
                           : null,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    PlateInput(
-                      controller: _nopolController,
-                      onSubmitted: _executePlateSearch,
-                      onChanged: _handlePlateChanged,
-                      onClear: _handlePlateCleared,
-                    ),
-                    if (_plateError != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        _plateError!,
-                        style: texts.bodySmall?.copyWith(
-                          color: scheme.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: AppButton(
-                            label: 'Scan Plat',
-                            icon: Icons.document_scanner_rounded,
-                            onPressed: _openAnprScanner,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: AppButton(
-                            label: 'Cek Data',
-                            icon: Icons.search_rounded,
-                            variant: AppButtonVariant.secondary,
-                            loading: _isSearchingPlate,
-                            loadingLabel: 'Memeriksa data',
-                            onPressed: _isSearchingPlate
-                                ? null
-                                : () => _executePlateSearch(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_hasSearchedPlate) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      _CandidateResultCard(
-                        candidate: _selectedCandidate,
-                        searchedPlate: _nopolController.text,
-                      ),
-                    ],
-                    const SizedBox(height: AppSpacing.xl),
-                    const SectionHeader(
-                      title: 'Data Pengemudi & Tujuan',
-                      subtitle: 'Identitas pengemudi dan keperluan kunjungan',
-                      icon: Icons.badge_outlined,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            'Tujuan kunjungan *',
-                            style: texts.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          PlateViewfinder(
+                            plate: _nopolController.text,
+                            onTap: _openAnprScanner,
+                            helperText:
+                                'Ketuk untuk memindai plat nomor (OCR Offline)',
                           ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Wrap(
-                            spacing: AppSpacing.xs,
-                            runSpacing: AppSpacing.xs,
-                            children: _tipeOptions.map((option) {
-                              final selected = _tipeKunjungan == option;
-                              final display = option == 'Beli Part'
-                                  ? 'Sparepart'
-                                  : option;
-                              return ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 48,
-                                ),
-                                child: ChoiceChip(
-                                  label: Text(display),
-                                  selected: selected,
-                                  showCheckmark: false,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.padded,
-                                  selectedColor: scheme.primaryContainer,
-                                  backgroundColor: scheme.surfaceContainer,
-                                  side: BorderSide(
-                                    color: selected
-                                        ? scheme.primary
-                                        : scheme.outlineVariant,
-                                  ),
-                                  labelStyle: texts.labelLarge?.copyWith(
-                                    color: selected
-                                        ? scheme.onPrimaryContainer
-                                        : scheme.onSurface,
-                                  ),
-                                  onSelected: (value) {
-                                    if (!value) return;
-                                    setState(() {
-                                      _tipeKunjungan = option;
-                                      if (option != 'Lainnya') {
-                                        _customTipeController.clear();
-                                      }
-                                    });
-                                  },
-                                ),
-                              );
-                            }).toList(),
+                          const SizedBox(height: AppSpacing.sm),
+                          PlateInput(
+                            controller: _nopolController,
+                            onSubmitted: _executePlateSearch,
+                            onChanged: _handlePlateChanged,
+                            onClear: _handlePlateCleared,
                           ),
-                          if (_tipeKunjungan == 'Lainnya') ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            AppTextField(
-                              controller: _customTipeController,
-                              label: 'Tujuan lainnya',
-                              hint: 'Tuliskan tujuan kedatangan',
-                              required: true,
-                              textCapitalization: TextCapitalization.sentences,
+                          if (_plateError != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              _plateError!,
+                              style: texts.bodySmall?.copyWith(
+                                color: scheme.error,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
+                          const SizedBox(height: AppSpacing.sm),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: AppButton(
+                                  label: _nopolController.text.trim().isEmpty
+                                      ? 'Scan Plat'
+                                      : 'Scan Ulang',
+                                  icon: Icons.document_scanner_rounded,
+                                  size: AppButtonSize.medium,
+                                  onPressed: _openAnprScanner,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: AppButton(
+                                  label: 'Cek Data',
+                                  icon: Icons.search_rounded,
+                                  variant: AppButtonVariant.secondary,
+                                  size: AppButtonSize.medium,
+                                  loading: _isSearchingPlate,
+                                  loadingLabel: 'Memeriksa data',
+                                  onPressed: _isSearchingPlate
+                                      ? null
+                                      : () => _executePlateSearch(),
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: AppSpacing.md),
+                          LokasiSelectorBlock(
+                            lokasiList: _lokasiList,
+                            selectedLokasi: _selectedLokasi,
+                            isLoading: _isLoadingLokasi,
+                            errorText: _lokasiError,
+                            onSelected: (loc) {
+                              setState(() {
+                                _selectedLokasi = loc;
+                                _lokasiError = null;
+                              });
+                            },
+                          ),
+                          if (_hasSearchedPlate) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            _CandidateResultCard(
+                              candidate: _selectedCandidate,
+                              searchedPlate: _nopolController.text,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    SectionCard(
+                      stepNumber: 2,
+                      title: 'Tujuan kunjungan',
+                      subtitle: 'Pilih tujuan di atas, atau isi Tujuan lainnya di bawah',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_isLoadingTujuan && _tujuanList.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: AppSpacing.xs,
+                              runSpacing: AppSpacing.xs,
+                              children: _tujuanList.map((item) {
+                                final selected =
+                                    !hasCustomTujuan &&
+                                    _selectedTujuan?.kodeTujuan ==
+                                        item.kodeTujuan;
+                                return _TujuanOptionPill(
+                                  item: item,
+                                  selected: selected,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedTujuan = item;
+                                      _kategoriTujuan = item.kodeTujuan;
+                                      _subTujuan = item.kodeTujuan;
+                                      _customTipeController.clear();
+                                      _tujuanError = null;
+                                      _picError = null;
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          const SizedBox(height: AppSpacing.md),
+                          Divider(
+                            height: 1,
+                            color: scheme.outlineVariant.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: _customTipeController,
+                            label: 'Tujuan lainnya (Opsional)',
+                            hint: 'Isi jika tujuan tidak ada di daftar atas (otomatis dipakai)',
+                            prefixIcon: Icons.edit_outlined,
+                            textCapitalization: TextCapitalization.sentences,
+                            errorText: _tujuanError,
+                            onChanged: (_) {
+                              setState(() {
+                                _tujuanError = null;
+                                _picError = null;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    SectionCard(
+                      stepNumber: 3,
+                      title: 'Data pengemudi',
+                      subtitle: 'Identitas pengemudi, PIC, dan keperluan',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           AppTextField(
                             controller: _driverNameController,
                             label: 'Nama pengemudi',
@@ -686,46 +939,58 @@ class _CheckInViewState extends State<CheckInView> {
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
                             controller: _driverPhoneController,
-                            label: 'Nomor telepon pengemudi',
+                            label: 'Nomor telepon',
                             hint: 'Contoh: 0812 3456 7890',
+                            required: true,
                             prefixIcon: Icons.phone_outlined,
                             keyboardType: TextInputType.phone,
                             textInputAction: TextInputAction.next,
+                            errorText: _phoneError,
+                            onChanged: (_) {
+                              if (_phoneError != null) {
+                                setState(() => _phoneError = null);
+                              }
+                            },
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: _picController,
-                            label: 'PIC / Petugas Tujuan',
-                            hint: _isLoadingEmployees
-                                ? 'Memuat daftar PIC...'
-                                : 'Pilih petugas tujuan',
-                            required: true,
-                            readOnly: true,
-                            prefixIcon: Icons.person_search_outlined,
-                            errorText: _picError,
-                            onTap: _openPicPicker,
-                            suffixIcon: IconButton(
-                              tooltip: 'Pilih PIC',
-                              onPressed: _openPicPicker,
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                              ),
+                          if (hasCustomTujuan)
+                            AppTextField(
+                              controller: _picController,
+                              label: 'PIC / Orang yang Dituju',
+                              hint: 'Ketik nama PIC secara manual',
+                              required: true,
+                              prefixIcon: Icons.person_outline_rounded,
+                              textCapitalization: TextCapitalization.words,
+                              errorText: _picError,
+                              onChanged: (_) {
+                                if (_picError != null) {
+                                  setState(() => _picError = null);
+                                }
+                              },
+                            )
+                          else
+                            _PicSelectorTile(
+                              selectedEmployee: _selectedEmployee,
+                              fallbackName: _selectedPic,
+                              isLoading: _isLoadingEmployees,
+                              errorText: _picError,
+                              onTap: _openPicPicker,
                             ),
-                          ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
                             controller: _complaintController,
-                            label: 'Keperluan / keluhan',
-                            hint: 'Contoh: ganti oli, periksa rem',
-                            maxLines: 3,
+                            label: 'Keperluan (Opsional)',
+                            hint:
+                                'Contoh: ganti oli, bertemu PIC, bongkar muat',
+                            maxLines: 2,
                             minLines: 2,
                             textCapitalization: TextCapitalization.sentences,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
                             controller: _notesController,
-                            label: 'Catatan tambahan',
-                            hint: 'Opsional, misalnya kondisi barang bawaan',
+                            label: 'Catatan (Opsional)',
+                            hint: 'Opsional, catatan tambahan dari security',
                             maxLines: 2,
                             minLines: 2,
                             textCapitalization: TextCapitalization.sentences,
@@ -733,25 +998,25 @@ class _CheckInViewState extends State<CheckInView> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xl),
-                    SectionHeader(
-                      title: 'Foto Kendaraan',
-                      subtitle: 'Empat sudut kendaraan',
-                      icon: Icons.photo_camera_outlined,
-                      trailing: Text(
-                        '$photoCount/4',
-                        style: texts.labelLarge?.copyWith(
-                          color: photoCount == 4
-                              ? semantic.success
-                              : scheme.onSurfaceVariant,
-                        ),
+                    const SizedBox(height: AppSpacing.md),
+                    SectionCard(
+                      stepNumber: 4,
+                      title: 'Foto kendaraan & supir',
+                      subtitle: totalRequired > 0
+                          ? 'Foto bertanda * wajib diisi'
+                          : 'Dokumentasi kondisi kendaraan',
+                      trailing: StatusChip(
+                        requiredCount >= totalRequired
+                            ? AppStatus.readyToExit
+                            : AppStatus.info,
+                        label: totalRequired > 0
+                            ? '$requiredCount/$totalRequired wajib'
+                            : '${_photos.length} foto',
+                        compact: true,
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    AppCard(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
                       child: PhotoQuadPicker(
                         photos: _photos,
+                        fotoSettings: _fotoSettings,
                         enabled: !_isSubmitting,
                         uploadCurrent: _uploadCurrent,
                         uploadTotal: _uploadTotal,
@@ -770,18 +1035,152 @@ class _CheckInViewState extends State<CheckInView> {
             ),
           ),
         ),
-        StickyBottomBar(
-          hint: _isSubmitting
-              ? 'Mohon tunggu, data sedang diproses.'
-              : 'Data bertanda * wajib diisi.',
-          child: AppButton(
-            label: 'Konfirmasi Check-In',
-            icon: Icons.check_circle_outline_rounded,
-            loading: _isSubmitting,
-            loadingLabel: uploadLabel ?? 'Memproses check-in',
-            onPressed: _isSubmitting ? null : _handleSubmitCheckIn,
+        if (widget.dockCtaNotifier == null)
+          StickyBottomBar(
+            hint: _isSubmitting
+                ? 'Mohon tunggu, data sedang diproses.'
+                : 'Data bertanda * wajib diisi.',
+            child: ctaButton,
+          ),
+      ],
+    );
+  }
+}
+
+class _PicSelectorTile extends StatelessWidget {
+  const _PicSelectorTile({
+    required this.selectedEmployee,
+    required this.fallbackName,
+    required this.isLoading,
+    required this.errorText,
+    required this.onTap,
+  });
+
+  final EmployeeItem? selectedEmployee;
+  final String? fallbackName;
+  final bool isLoading;
+  final String? errorText;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+    final displayName = selectedEmployee?.name ?? fallbackName ?? '';
+    final hasSelection = displayName.isNotEmpty;
+    final role = selectedEmployee?.position;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text.rich(
+            TextSpan(
+              text: 'PIC / Petugas Tujuan',
+              style: texts.labelMedium?.copyWith(
+                color: scheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+              children: [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: scheme.error,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainer,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: errorText != null
+                  ? Border.all(color: scheme.error, width: 1.2)
+                  : null,
+            ),
+            child: Row(
+              children: [
+                if (hasSelection)
+                  InitialsAvatar(name: displayName, size: 36)
+                else
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.person_search_outlined,
+                      size: 18,
+                      color: scheme.primary,
+                    ),
+                  ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        hasSelection
+                            ? displayName
+                            : (isLoading
+                                  ? 'Memuat daftar PIC...'
+                                  : 'Pilih petugas tujuan'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: texts.bodyLarge?.copyWith(
+                          color: hasSelection
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                          fontWeight: hasSelection
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      if (role != null && role.isNotEmpty)
+                        Text(
+                          role,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: texts.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              errorText!,
+              style: texts.bodySmall?.copyWith(
+                color: scheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1133,9 +1532,11 @@ class _PicPickerSheetState extends State<_PicPickerSheet> {
     final texts = Theme.of(context).textTheme;
     final query = _query.trim().toLowerCase();
     final filtered = widget.employees
-        .where((emp) =>
-            emp.name.toLowerCase().contains(query) ||
-            emp.position.toLowerCase().contains(query))
+        .where(
+          (emp) =>
+              emp.name.toLowerCase().contains(query) ||
+              emp.position.toLowerCase().contains(query),
+        )
         .toList();
 
     return SafeArea(
@@ -1272,7 +1673,9 @@ class _PicPickerSheetState extends State<_PicPickerSheet> {
                                     AppRadius.xs,
                                   ),
                                   border: Border.all(
-                                    color: scheme.primary.withValues(alpha: 0.22),
+                                    color: scheme.primary.withValues(
+                                      alpha: 0.22,
+                                    ),
                                   ),
                                 ),
                                 child: Text(
@@ -1300,6 +1703,84 @@ class _PicPickerSheetState extends State<_PicPickerSheet> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TujuanOptionPill extends StatelessWidget {
+  const _TujuanOptionPill({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TujuanKedatanganItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  IconData _iconFor(String kode) {
+    switch (kode.toUpperCase()) {
+      case 'SERVICE':
+        return Icons.build_rounded;
+      case 'KUNJUNGAN':
+        return Icons.badge_outlined;
+      case 'BELI_SPAREPART':
+        return Icons.inventory_2_outlined;
+      default:
+        return Icons.assignment_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semantic;
+    final texts = Theme.of(context).textTheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: AppDurations.fast,
+        constraints: const BoxConstraints(minHeight: 46, minWidth: 112),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? semantic.infoContainer : scheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: selected
+                    ? scheme.primary
+                    : scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                _iconFor(item.kodeTujuan),
+                size: 16,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              item.namaTujuan,
+              style: texts.labelLarge?.copyWith(
+                color: selected ? scheme.primary : scheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );

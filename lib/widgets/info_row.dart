@@ -57,11 +57,12 @@ class InfoRow extends StatelessWidget {
             child: Text(
               displayValue,
               textAlign: TextAlign.end,
-              style: (valueStyle ?? (dense ? texts.bodySmall : texts.bodyMedium))
-                  ?.copyWith(
-                color: valueColor ?? scheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
+              style:
+                  (valueStyle ?? (dense ? texts.bodySmall : texts.bodyMedium))
+                      ?.copyWith(
+                        color: valueColor ?? scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
             ),
           ),
           if (trailing != null) ...[

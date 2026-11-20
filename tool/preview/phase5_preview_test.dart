@@ -274,10 +274,38 @@ Widget _home({String? initialCheckoutPlate}) {
 }
 
 const List<EmployeeItem> _employees = [
-  EmployeeItem(id: 34, name: 'GUNAWAN', employeeId: '000024', position: 'SERVICE ADVISOR', mobileNumber: '081213952408', isServiceAdvisor: true),
-  EmployeeItem(id: 7, name: 'Hisar Mangapul Paidaon Tambunan', employeeId: '000003', position: 'ADMIN', mobileNumber: '081375320851', isServiceAdvisor: true),
-  EmployeeItem(id: 33, name: 'BEBY PUSPA ANDINI', employeeId: '000023', position: 'CUSTOMER SERVICE', mobileNumber: '085275536382', isServiceAdvisor: false),
-  EmployeeItem(id: 6, name: 'Rini Rahmawati', employeeId: '000002', position: 'CASHIER', mobileNumber: '081260789424', isServiceAdvisor: false),
+  EmployeeItem(
+    id: 34,
+    name: 'GUNAWAN',
+    employeeId: '000024',
+    position: 'SERVICE ADVISOR',
+    mobileNumber: '081213952408',
+    isServiceAdvisor: true,
+  ),
+  EmployeeItem(
+    id: 7,
+    name: 'Hisar Mangapul Paidaon Tambunan',
+    employeeId: '000003',
+    position: 'ADMIN',
+    mobileNumber: '081375320851',
+    isServiceAdvisor: true,
+  ),
+  EmployeeItem(
+    id: 33,
+    name: 'BEBY PUSPA ANDINI',
+    employeeId: '000023',
+    position: 'CUSTOMER SERVICE',
+    mobileNumber: '085275536382',
+    isServiceAdvisor: false,
+  ),
+  EmployeeItem(
+    id: 6,
+    name: 'Rini Rahmawati',
+    employeeId: '000002',
+    position: 'CASHIER',
+    mobileNumber: '081260789424',
+    isServiceAdvisor: false,
+  ),
 ];
 
 List<ActiveVehicle> _activeVehicles() {
@@ -428,10 +456,8 @@ class _ProfilePreviewState extends State<_ProfilePreview> {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => ProfileSheet(
-          session: AuthService.currentSession,
-          onLogout: () {},
-        ),
+        builder: (_) =>
+            ProfileSheet(session: AuthService.currentSession, onLogout: () {}),
       );
     });
   }

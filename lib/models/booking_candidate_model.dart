@@ -60,12 +60,15 @@ class CheckinCandidate {
   });
 
   factory CheckinCandidate.fromJson(Map<String, dynamic> json) {
-    final rawClean = (json['no_polisi_clean'] ?? json['no_polisi'] ?? json['nopol'] ?? '')
-        .toString()
-        .toUpperCase()
-        .replaceAll(RegExp(r'\s+'), '');
+    final rawClean =
+        (json['no_polisi_clean'] ?? json['no_polisi'] ?? json['nopol'] ?? '')
+            .toString()
+            .toUpperCase()
+            .replaceAll(RegExp(r'\s+'), '');
 
-    final source = json['source']?.toString().toUpperCase() == 'BOOKING' ? 'BOOKING' : 'MEMBER_UNIT';
+    final source = json['source']?.toString().toUpperCase() == 'BOOKING'
+        ? 'BOOKING'
+        : 'MEMBER_UNIT';
 
     return CheckinCandidate(
       source: source,
@@ -75,22 +78,33 @@ class CheckinCandidate {
       noBooking: json['no_booking']?.toString(),
       noPolisi: (json['no_polisi'] ?? json['nopol'] ?? rawClean).toString(),
       noPolisiClean: rawClean,
-      customerName: json['customer_name']?.toString() ?? json['nama_pelanggan']?.toString(),
-      customerTelepon: json['customer_telepon']?.toString() ?? json['telepon']?.toString(),
+      customerName:
+          json['customer_name']?.toString() ??
+          json['nama_pelanggan']?.toString(),
+      customerTelepon:
+          json['customer_telepon']?.toString() ?? json['telepon']?.toString(),
       jenisLayanan: json['jenis_layanan']?.toString(),
       keluhan: json['keluhan']?.toString() ?? json['catatan']?.toString(),
       catatan: json['catatan']?.toString(),
       tanggalBooking: json['tanggal_booking']?.toString(),
       jamBooking: json['jam_booking']?.toString(),
-      statusBooking: json['status_booking']?.toString() ?? json['status']?.toString(),
-      isConfirmed: json['is_confirmed'] == true ||
+      statusBooking:
+          json['status_booking']?.toString() ?? json['status']?.toString(),
+      isConfirmed:
+          json['is_confirmed'] == true ||
           json['is_confirmed']?.toString().toLowerCase() == 'true' ||
           json['is_confirmed']?.toString() == '1',
-      canCheckin: json['can_checkin'] != false && json['can_checkin']?.toString() != '0',
+      canCheckin:
+          json['can_checkin'] != false &&
+          json['can_checkin']?.toString() != '0',
       isWithinWindow: json['is_within_window'] != false,
       isStaleUnconfirmed: json['is_stale_unconfirmed'] == true,
-      unitId: json['unit_id'] != null ? int.tryParse(json['unit_id'].toString()) : null,
-      memberId: json['member_id'] != null ? int.tryParse(json['member_id'].toString()) : null,
+      unitId: json['unit_id'] != null
+          ? int.tryParse(json['unit_id'].toString())
+          : null,
+      memberId: json['member_id'] != null
+          ? int.tryParse(json['member_id'].toString())
+          : null,
       namaPerusahaan: json['nama_perusahaan']?.toString(),
       namaPenggunaFleet: json['nama_pengguna_fleet']?.toString(),
       namaPic: json['nama_pic']?.toString(),
@@ -98,7 +112,9 @@ class CheckinCandidate {
       jenisArmada: json['jenis_armada']?.toString(),
       merk: json['merk']?.toString(),
       model: json['model']?.toString() ?? json['tipe_kendaraan']?.toString(),
-      tahun: json['tahun'] != null ? int.tryParse(json['tahun'].toString()) : null,
+      tahun: json['tahun'] != null
+          ? int.tryParse(json['tahun'].toString())
+          : null,
       hasActiveBooking: json['has_active_booking'] == true,
     );
   }
@@ -124,7 +140,9 @@ class CheckinCandidate {
   String get mappedTipeKunjungan {
     if (source == 'BOOKING') {
       final layanan = (jenisLayanan ?? '').toLowerCase();
-      if (layanan.contains('part') || layanan.contains('sparepart') || layanan.contains('beli')) {
+      if (layanan.contains('part') ||
+          layanan.contains('sparepart') ||
+          layanan.contains('beli')) {
         return 'Beli Part';
       } else if (layanan.contains('kunjungan') || layanan.contains('tamu')) {
         return 'Kunjungan';

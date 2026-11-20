@@ -60,7 +60,10 @@ class InitialsAvatar extends StatelessWidget {
     );
 
     if (onTap == null) {
-      return Semantics(label: 'Avatar ${initialsFromName(name)}', child: circle);
+      return Semantics(
+        label: 'Avatar ${initialsFromName(name)}',
+        child: circle,
+      );
     }
 
     return Semantics(

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../config/theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
-import 'home_nav_view.dart';
+import 'gate_select_view.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -64,11 +63,12 @@ class _LoginViewState extends State<LoginView> {
     if (res['success'] == true) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HomeNavView()),
+        MaterialPageRoute(builder: (_) => const GateSelectView()),
       );
     } else {
       setState(() {
-        _errorMessage = res['message'] ??
+        _errorMessage =
+            res['message'] ??
             'User ID atau kata sandi yang Anda masukkan tidak sesuai. '
                 'Silakan periksa kembali dan coba lagi.';
       });
@@ -91,72 +91,118 @@ class _LoginViewState extends State<LoginView> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isWide = MediaQuery.sizeOf(context).width >= 600;
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final texts = Theme.of(context).textTheme;
 
-    // Header login selalu navy, sehingga ikon status bar harus terang.
-    final overlay = AppTheme.overlayStyle(Brightness.dark, scheme).copyWith(
-      systemNavigationBarIconBrightness:
-          scheme.brightness == Brightness.dark
-              ? Brightness.light
-              : Brightness.dark,
-    );
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: overlay,
-      child: Scaffold(
-        backgroundColor: scheme.surfaceContainerLow,
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            final heroHeight = isWide ? 300.0 : 260.0;
-            final sheetMinHeight =
-                constraints.maxHeight > heroHeight
-                    ? constraints.maxHeight - heroHeight + 24
-                    : 0.0;
-
-            return SingleChildScrollView(
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Column(
-                  children: [
-                    _LoginHero(height: heroHeight),
-                    Transform.translate(
-                      offset: const Offset(0, -24),
-                      child: Container(
-                        width: double.infinity,
-                        constraints: BoxConstraints(minHeight: sheetMinHeight),
-                        padding: EdgeInsets.fromLTRB(
-                          AppSpacing.xl,
-                          AppSpacing.xl,
-                          AppSpacing.xl,
-                          AppSpacing.xl + bottomInset,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.surface,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(28),
-                          ),
-                          boxShadow: AppShadows.raised(context),
-                        ),
-                        child: Align(
-                          alignment: isWide
-                              ? Alignment.center
-                              : Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 440),
-                            child: _buildForm(context),
-                          ),
-                        ),
-                      ),
-                    ),
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: Stack(
+        children: [
+          Positioned(
+            right: -90,
+            top: -90,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    scheme.primary.withValues(alpha: 0.16),
+                    scheme.primary.withValues(alpha: 0),
                   ],
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          ),
+          Positioned(
+            left: -100,
+            bottom: -100,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    scheme.secondary.withValues(alpha: 0.14),
+                    scheme.secondary.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: scheme.primary.withValues(alpha: 0.14),
+                            ),
+                            boxShadow: AppShadows.raised(context),
+                          ),
+                          child: Image.asset(
+                            'assets/images/darkogate-logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.shield_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'DARKOGATE · POS GERBANG',
+                        style: texts.labelMedium?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        'Selamat datang',
+                        style: texts.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        'Masuk dengan akun POS terdaftar untuk memulai tugas gerbang.',
+                        style: texts.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      AppCard(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        child: _buildForm(context),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -168,25 +214,6 @@ class _LoginViewState extends State<LoginView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'AKSES PETUGAS',
-          style: texts.labelMedium?.copyWith(
-            color: scheme.primary,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xxs),
-        Text(
-          'Masuk ke Pos Security',
-          style: texts.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: AppSpacing.xxs),
-        Text(
-          'Gunakan akun POS yang terdaftar untuk memulai shift.',
-          style: texts.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: AppSpacing.lg),
         AnimatedSize(
           duration: AppDurations.normal,
           curve: Curves.easeOut,
@@ -248,149 +275,13 @@ class _LoginViewState extends State<LoginView> {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          '© ${DateTime.now().year} Master Truck · KIM 3',
+          '© ${DateTime.now().year} DarkoGate · KIM 3',
           textAlign: TextAlign.center,
           style: texts.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _LoginHero extends StatelessWidget {
-  const _LoginHero({required this.height});
-
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    final texts = Theme.of(context).textTheme;
-    final topInset = MediaQuery.paddingOf(context).top;
-
-    return Container(
-      width: double.infinity,
-      constraints: BoxConstraints(minHeight: height),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF1D4ED8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -48,
-            top: -56,
-            child: _HeroCircle(
-              size: 190,
-              color: AppTheme.surfaceWhite.withValues(alpha: 0.05),
-            ),
-          ),
-          Positioned(
-            left: -64,
-            bottom: -72,
-            child: _HeroCircle(
-              size: 210,
-              color: AppTheme.surfaceWhite.withValues(alpha: 0.04),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              topInset + AppSpacing.xl,
-              AppSpacing.xl,
-              AppSpacing.xxl + AppSpacing.md,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 72,
-                      height: 72,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceWhite.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(
-                          color: AppTheme.surfaceWhite.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      child: Image.asset(
-                        'assets/images/master-truck-logo-transparent.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.shield_rounded,
-                          color: AppTheme.amberGold,
-                          size: 38,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'MASTER TRUCK',
-                      textAlign: TextAlign.center,
-                      style: texts.titleLarge?.copyWith(
-                        color: AppTheme.surfaceWhite,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2.2,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xxs),
-                    Text(
-                      'Pos Security Gerbang',
-                      textAlign: TextAlign.center,
-                      style: texts.bodyMedium?.copyWith(
-                        color: AppTheme.surfaceWhite.withValues(alpha: 0.86),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.amberGold,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                      child: Text(
-                        'BENGKEL KIM 3',
-                        style: texts.labelSmall?.copyWith(
-                          color: const Color(0xFF1E3A8A),
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroCircle extends StatelessWidget {
-  const _HeroCircle({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -413,14 +304,16 @@ class _LoginErrorBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.errorContainer,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(
-          color: scheme.error.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline_rounded, size: 20, color: scheme.onErrorContainer),
+          Icon(
+            Icons.error_outline_rounded,
+            size: 20,
+            color: scheme.onErrorContainer,
+          ),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(

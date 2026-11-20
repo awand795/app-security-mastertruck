@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mastertruck.security.bengkel_kim3_security_app"
+    namespace = "com.darkogate.security"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.mastertruck.security.bengkel_kim3_security_app"
+        applicationId = "com.darkogate.security"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -25,6 +25,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

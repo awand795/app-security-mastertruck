@@ -5,6 +5,7 @@ import '../config/theme.dart';
 import '../models/active_vehicle_model.dart';
 import '../models/memo_keluar_model.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
 
 /// Data yang sudah tersedia dari ApiService untuk ringkasan Beranda.
@@ -109,10 +110,18 @@ class _BerandaViewState extends State<BerandaView> {
   Widget build(BuildContext context) {
     final now = widget.clock?.call() ?? DateTime.now();
     final active = _data?.active ?? const <ActiveVehicle>[];
-    final readyCount = active.where((vehicle) => vehicle.isSiapKeluar).length;
+    final insideCount = active.where((v) => !v.isKeluarSementara).length;
+    final readyCount = active
+        .where((v) => !v.isKeluarSementara && v.isSiapKeluar)
+        .length;
+    final progressCount = active
+        .where((v) => v.isKeluarSementara || !v.isSiapKeluar)
+        .length;
     final exitedToday =
-        _data?.exited.where((memo) => _isSameDay(memo.waktuKeluar, now)).length ??
-            0;
+        _data?.exited
+            .where((memo) => _isSameDay(memo.waktuKeluar, now))
+            .length ??
+        0;
     final recent = _recentVehicles(active);
 
     return Center(
@@ -147,55 +156,21 @@ class _BerandaViewState extends State<BerandaView> {
                   height: 320,
                   child: ErrorState(
                     compact: true,
-                    message:
-                        'Periksa koneksi internet lalu muat ulang ringkasan gerbang.',
+                    message: 'Periksa koneksi internet lalu muat ulang ringkasan gerbang.',
                     onRetry: () => _load(showSkeleton: true),
                   ),
                 ),
               ] else ...[
                 _SummaryCard(
-                  insideCount: active.length,
+                  insideCount: insideCount,
                   readyCount: readyCount,
+                  progressCount: progressCount,
                   exitedToday: exitedToday,
                   onTap: () => widget.onOpenTab(2),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                const SectionHeader(
-                  title: 'Aksi cepat',
-                  subtitle: 'Alur tercepat untuk petugas gerbang',
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _QuickAction(
-                          icon: Icons.qr_code_scanner_rounded,
-                          label: 'Scan Plat Masuk',
-                          caption: 'Catat kendaraan',
-                          background: Theme.of(context).colorScheme.primary,
-                          foreground: Theme.of(context).colorScheme.onPrimary,
-                          onTap: () => widget.onOpenTab(1),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: _QuickAction(
-                          icon: Icons.exit_to_app_rounded,
-                          label: 'Scan Plat Keluar',
-                          caption: 'Validasi invoice',
-                          background: context.semantic.warningContainer,
-                          foreground: context.semantic.onWarningContainer,
-                          onTap: () => widget.onOpenTab(3),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
                 SectionHeader(
-                  title: 'Kendaraan terbaru',
+                  title: 'Di dalam sekarang',
                   trailing: active.isEmpty
                       ? null
                       : TextButton(
@@ -248,10 +223,18 @@ class _GreetingHeader extends StatelessWidget {
   final DateTime now;
   final VoidCallback onOpenProfile;
 
+  String _shiftLabel(DateTime now) {
+    final h = now.hour;
+    if (h >= 6 && h < 14) return 'Shift pagi';
+    if (h >= 14 && h < 22) return 'Shift sore';
+    return 'Shift malam';
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final texts = Theme.of(context).textTheme;
+    final gateName = AuthService.currentSession?.gateName ?? 'Pos Gerbang';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,43 +242,32 @@ class _GreetingHeader extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 42,
-              height: 42,
-              padding: const EdgeInsets.all(7),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: AppTheme.corporateNavy,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
-              child: Image.asset(
-                'assets/images/master-truck-logo.png',
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.shield_rounded,
-                  color: AppTheme.amberGold,
-                  size: 22,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  Icon(
+                    Icons.door_sliding_rounded,
+                    size: 15,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    'MasterTruck',
-                    style: texts.titleSmall?.copyWith(
+                    '$gateName · ${_shiftLabel(now)}',
+                    style: texts.labelMedium?.copyWith(
                       fontWeight: FontWeight.w800,
+                      color: scheme.primary,
                     ),
                   ),
-                  Text('Pos Gerbang KIM 3', style: texts.bodySmall),
                 ],
               ),
             ),
-            InitialsAvatar(
-              name: officerName,
-              size: 44,
-              onTap: onOpenProfile,
-            ),
+            const Spacer(),
+            InitialsAvatar(name: officerName, size: 44, onTap: onOpenProfile),
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -336,29 +308,28 @@ class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.insideCount,
     required this.readyCount,
+    required this.progressCount,
     required this.exitedToday,
     required this.onTap,
   });
 
   final int insideCount;
   final int readyCount;
+  final int progressCount;
   final int exitedToday;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final texts = Theme.of(context).textTheme;
-    final isDark = context.isDarkMode;
-    final background = isDark ? scheme.surfaceContainerHigh : scheme.primary;
-    final foreground = isDark ? scheme.onSurface : scheme.onPrimary;
-    final muted = foreground.withValues(alpha: 0.72);
-    final divider = foreground.withValues(alpha: 0.16);
+    const foreground = Colors.white;
+    final muted = foreground.withValues(alpha: 0.78);
+    final divider = foreground.withValues(alpha: 0.18);
 
     return AppCard(
       onTap: onTap,
-      backgroundColor: background,
-      borderColor: isDark ? scheme.outlineVariant : background,
+      gradient: AppGradients.primary,
+      elevated: true,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Stack(
         clipBehavior: Clip.none,
@@ -369,7 +340,7 @@ class _SummaryCard extends StatelessWidget {
             child: Icon(
               Icons.local_shipping_rounded,
               size: 124,
-              color: foreground.withValues(alpha: 0.07),
+              color: foreground.withValues(alpha: 0.09),
             ),
           ),
           Column(
@@ -377,9 +348,13 @@ class _SummaryCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.local_shipping_rounded, size: 18, color: foreground),
+                  const Icon(
+                    Icons.local_shipping_rounded,
+                    size: 18,
+                    color: foreground,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
-                  Flexible(
+                  Expanded(
                     child: Text(
                       'KENDARAAN DI DALAM',
                       maxLines: 1,
@@ -390,6 +365,11 @@ class _SummaryCard extends StatelessWidget {
                         letterSpacing: 0.7,
                       ),
                     ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: foreground,
+                    size: 20,
                   ),
                 ],
               ),
@@ -429,8 +409,18 @@ class _SummaryCard extends StatelessWidget {
                       muted: muted,
                     ),
                   ),
-                  Container(width: 1, height: 34, color: divider),
-                  const SizedBox(width: AppSpacing.md),
+                  Container(width: 1, height: 32, color: divider),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: _MiniStat(
+                      label: 'Pengerjaan',
+                      value: '$progressCount',
+                      color: foreground,
+                      muted: muted,
+                    ),
+                  ),
+                  Container(width: 1, height: 32, color: divider),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: _MiniStat(
                       label: 'Keluar hari ini',
@@ -439,7 +429,6 @@ class _SummaryCard extends StatelessWidget {
                       muted: muted,
                     ),
                   ),
-                  Icon(Icons.arrow_forward_rounded, color: foreground, size: 20),
                 ],
               ),
             ],
@@ -477,77 +466,10 @@ class _MiniStat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(color: color, fontWeight: FontWeight.w800),
         ),
       ],
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    required this.caption,
-    required this.background,
-    required this.foreground,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String caption;
-  final Color background;
-  final Color foreground;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final texts = Theme.of(context).textTheme;
-
-    return AppCard(
-      onTap: onTap,
-      semanticLabel: '$label. $caption',
-      backgroundColor: background,
-      borderColor: background,
-      showShadow: false,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: foreground.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Icon(icon, color: foreground, size: 22),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: texts.titleSmall?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xxs),
-          Text(
-            caption,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: texts.bodySmall?.copyWith(
-              color: foreground.withValues(alpha: 0.82),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -596,7 +518,9 @@ class _VehicleCard extends StatelessWidget {
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: StatusChip(
-                          isReady ? AppStatus.readyToExit : AppStatus.inProgress,
+                          isReady
+                              ? AppStatus.readyToExit
+                              : AppStatus.inProgress,
                           compact: true,
                         ),
                       ),
@@ -668,7 +592,8 @@ String _dateLabel(DateTime date) {
 }
 
 List<ActiveVehicle> _recentVehicles(List<ActiveVehicle> vehicles) {
-  final sorted = [...vehicles]..sort((a, b) {
+  final sorted = [...vehicles]
+    ..sort((a, b) {
       final aTime = a.waktuCheckIn;
       final bTime = b.waktuCheckIn;
       if (aTime == null && bTime == null) return b.id.compareTo(a.id);

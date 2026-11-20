@@ -16,20 +16,22 @@ class EmployeeItem {
   });
 
   factory EmployeeItem.fromJson(Map<String, dynamic> json) {
-    final name = (json['employeename'] ??
-            json['nama'] ??
-            json['name'] ??
-            json['nama_lengkap'] ??
-            '')
-        .toString()
-        .trim();
-    final pos = (json['positionname'] ??
-            json['jabatan'] ??
-            (json['isserviceadvisor'] == true
-                ? 'Service Advisor'
-                : 'Karyawan'))
-        .toString()
-        .trim();
+    final name =
+        (json['employeename'] ??
+                json['nama'] ??
+                json['name'] ??
+                json['nama_lengkap'] ??
+                '')
+            .toString()
+            .trim();
+    final pos =
+        (json['positionname'] ??
+                json['jabatan'] ??
+                (json['isserviceadvisor'] == true
+                    ? 'Service Advisor'
+                    : 'Karyawan'))
+            .toString()
+            .trim();
 
     return EmployeeItem(
       id: json['id'] is int

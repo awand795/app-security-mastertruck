@@ -25,10 +25,11 @@ class ProfileSheet extends StatelessWidget {
     final texts = Theme.of(context).textTheme;
     final name = session?.name ?? 'Petugas Security';
     final role = session?.role ?? 'SECURITY';
-    final branch = session?.namaCabang ??
+    final branch =
+        session?.namaCabang ??
         (session?.kodeCabang != null
             ? 'Cabang ${session!.kodeCabang}'
-            : 'Bengkel Master Truck KIM 3');
+            : 'Bengkel DarkoGate KIM 3');
 
     return SafeArea(
       top: false,
@@ -88,13 +89,19 @@ class ProfileSheet extends StatelessWidget {
                         value: session?.userId ?? '-',
                         icon: Icons.badge_outlined,
                       ),
-                      Divider(height: AppSpacing.lg, color: scheme.outlineVariant),
+                      Divider(
+                        height: AppSpacing.lg,
+                        color: scheme.outlineVariant,
+                      ),
                       InfoRow(
                         label: 'Peran',
                         value: role.toUpperCase(),
                         icon: Icons.admin_panel_settings_outlined,
                       ),
-                      Divider(height: AppSpacing.lg, color: scheme.outlineVariant),
+                      Divider(
+                        height: AppSpacing.lg,
+                        color: scheme.outlineVariant,
+                      ),
                       InfoRow(
                         label: 'Penempatan',
                         value: branch,
@@ -118,7 +125,7 @@ class ProfileSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'MasterTruck · Pos Security Gerbang KIM 3',
+                  'DarkoGate · Pos Security Gerbang KIM 3',
                   textAlign: TextAlign.center,
                   style: texts.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,

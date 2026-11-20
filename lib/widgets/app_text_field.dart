@@ -89,42 +89,74 @@ class _AppTextFieldState extends State<AppTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final labelText = widget.label == null
-        ? null
-        : (widget.required ? '${widget.label} *' : widget.label);
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
 
-    return TextField(
-      controller: widget.controller,
-      focusNode: widget.focusNode,
-      enabled: widget.enabled,
-      readOnly: widget.readOnly,
-      autofocus: widget.autofocus,
-      obscureText: _obscured,
-      keyboardType: widget.keyboardType,
-      textInputAction: widget.textInputAction,
-      inputFormatters: widget.inputFormatters,
-      textCapitalization: widget.textCapitalization,
-      textAlign: widget.textAlign,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-      maxLength: widget.maxLength,
-      onChanged: widget.onChanged,
-      onSubmitted: widget.onSubmitted,
-      onTap: widget.onTap,
-      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      autofillHints: widget.autofillHints,
-      style: widget.style ?? Theme.of(context).textTheme.bodyLarge,
-      decoration: InputDecoration(
-        labelText: labelText,
-        hintText: widget.hint,
-        helperText: widget.helper,
-        errorText: widget.errorText,
-        contentPadding: widget.contentPadding,
-        prefixIcon: widget.prefixIcon == null
-            ? null
-            : Icon(widget.prefixIcon, size: 20),
-        suffixIcon: _buildSuffixIcon(),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.label != null && widget.label!.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 6),
+            child: Text.rich(
+              TextSpan(
+                text: widget.label,
+                style: texts.labelMedium?.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+                children: widget.required
+                    ? [
+                        TextSpan(
+                          text: ' *',
+                          style: TextStyle(
+                            color: scheme.error,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ]
+                    : const [],
+              ),
+            ),
+          ),
+        ],
+        TextField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          enabled: widget.enabled,
+          readOnly: widget.readOnly,
+          autofocus: widget.autofocus,
+          obscureText: _obscured,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          inputFormatters: widget.inputFormatters,
+          textCapitalization: widget.textCapitalization,
+          textAlign: widget.textAlign,
+          maxLines: widget.maxLines,
+          minLines: widget.minLines,
+          maxLength: widget.maxLength,
+          onChanged: widget.onChanged,
+          onSubmitted: widget.onSubmitted,
+          onTap: widget.onTap,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          autofillHints: widget.autofillHints,
+          style: widget.style ?? texts.bodyLarge,
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            helperText: widget.helper,
+            errorText: widget.errorText,
+            prefixIcon: widget.prefixIcon != null
+                ? Icon(widget.prefixIcon)
+                : null,
+            suffixIcon: _buildSuffixIcon(),
+            constraints: const BoxConstraints(minHeight: 52),
+            contentPadding:
+                widget.contentPadding ??
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        ),
+      ],
     );
   }
 }

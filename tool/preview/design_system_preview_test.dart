@@ -36,9 +36,7 @@ void main() {
     await _loadLocalFont('${fontDir}PlusJakartaSans-SemiBold.ttf', [
       '${pjs}_600',
     ]);
-    await _loadLocalFont('${fontDir}PlusJakartaSans-Bold.ttf', [
-      '${pjs}_700',
-    ]);
+    await _loadLocalFont('${fontDir}PlusJakartaSans-Bold.ttf', ['${pjs}_700']);
     await _loadLocalFont('${fontDir}PlusJakartaSans-ExtraBold.ttf', [
       '${pjs}_800',
     ]);
@@ -155,8 +153,9 @@ class _PreviewApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode:
-          brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+      themeMode: brightness == Brightness.dark
+          ? ThemeMode.dark
+          : ThemeMode.light,
       home: _PreviewHome(scrollOffset: scrollOffset),
     );
   }
@@ -172,8 +171,9 @@ class _PreviewHome extends StatefulWidget {
 }
 
 class _PreviewHomeState extends State<_PreviewHome> {
-  late final ScrollController _controller =
-      ScrollController(initialScrollOffset: widget.scrollOffset);
+  late final ScrollController _controller = ScrollController(
+    initialScrollOffset: widget.scrollOffset,
+  );
 
   @override
   void dispose() {
@@ -204,16 +204,14 @@ class _PreviewHomeState extends State<_PreviewHome> {
                 const SizedBox(height: AppSpacing.xl),
                 Text(
                   'Selamat pagi,',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Bambang Sutrisno',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                  style: Theme.of(context).textTheme.headlineMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -367,19 +365,28 @@ class _PreviewHomeState extends State<_PreviewHome> {
                         value: 'B 2156 TQR',
                         icon: Icons.directions_car_outlined,
                       ),
-                      Divider(height: AppSpacing.lg, color: scheme.outlineVariant),
+                      Divider(
+                        height: AppSpacing.lg,
+                        color: scheme.outlineVariant,
+                      ),
                       const InfoRow(
                         label: 'Pengemudi',
                         value: 'Joko Santoso',
                         icon: Icons.person_outline_rounded,
                       ),
-                      Divider(height: AppSpacing.lg, color: scheme.outlineVariant),
+                      Divider(
+                        height: AppSpacing.lg,
+                        color: scheme.outlineVariant,
+                      ),
                       const InfoRow(
                         label: 'Tujuan',
                         value: 'Service berkala',
                         icon: Icons.build_outlined,
                       ),
-                      Divider(height: AppSpacing.lg, color: scheme.outlineVariant),
+                      Divider(
+                        height: AppSpacing.lg,
+                        color: scheme.outlineVariant,
+                      ),
                       InfoRow(
                         label: 'Invoice',
                         value: 'LUNAS',
@@ -438,9 +445,8 @@ class _PreviewHomeState extends State<_PreviewHome> {
                 Text(
                   'Plat nomor memakai Chivo · teks minimum 12 px · badge 11 px',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -486,9 +492,8 @@ class _BrandHeader extends StatelessWidget {
             children: [
               Text(
                 'MasterTruck',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
               Text(
                 'Pos Gerbang KIM 3',
@@ -513,9 +518,9 @@ class _BrandHeader extends StatelessWidget {
             child: Text(
               'BS',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: scheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
+                color: scheme.onSecondaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
@@ -566,10 +571,8 @@ class _SummaryCard extends StatelessWidget {
                       'Kendaraan di dalam',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: muted,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: muted, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -581,17 +584,16 @@ class _SummaryCard extends StatelessWidget {
                   Text(
                     '24',
                     style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          color: foreground,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: foreground,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 8),
                     child: Text(
                       'unit',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: muted,
-                          ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: muted),
                     ),
                   ),
                 ],
@@ -663,10 +665,8 @@ class _MiniStat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(color: color, fontWeight: FontWeight.w800),
         ),
       ],
     );
@@ -760,9 +760,9 @@ class _QuickAction extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -805,9 +805,8 @@ class _VehicleCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             driver,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 2),
           Row(

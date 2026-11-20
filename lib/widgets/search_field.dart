@@ -121,7 +121,10 @@ class _SearchFieldState extends State<SearchField> {
           decoration: InputDecoration(
             hintText: widget.hintText,
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
             prefixIcon: Icon(
               Icons.search_rounded,
               size: 20,

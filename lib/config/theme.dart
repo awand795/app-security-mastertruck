@@ -18,14 +18,30 @@ abstract final class AppSpacing {
   static const double xxl = 32;
 }
 
-/// Radius sudut konsisten. Target desain: 16-20 untuk permukaan utama.
+/// Radius sudut konsisten. Kartu 22, tombol/field/tile 16, chip pill.
 abstract final class AppRadius {
   static const double xs = 8;
   static const double sm = 12;
   static const double md = 16;
-  static const double lg = 20;
+  static const double lg = 22;
+  static const double card = 22;
   static const double xl = 24;
   static const double pill = 999;
+}
+
+/// Gradien standar Dribbble-style biru korporat.
+abstract final class AppGradients {
+  static const LinearGradient primary = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF2349C9), Color(0xFF4C74F5)],
+  );
+
+  static const LinearGradient softBlueBackdrop = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFEEF3FF), Color(0xFFF5F7FC)],
+  );
 }
 
 /// Durasi animasi standar agar micro-interaction terasa seragam.
@@ -88,47 +104,47 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color plateBorder;
 
   static const AppSemanticColors light = AppSemanticColors(
-    success: Color(0xFF15803D),
+    success: Color(0xFF12A06E),
     onSuccess: Color(0xFFFFFFFF),
-    successContainer: Color(0xFFDCFCE7),
-    onSuccessContainer: Color(0xFF14532D),
-    warning: Color(0xFFB45309),
+    successContainer: Color(0xFFDFF5EA),
+    onSuccessContainer: Color(0xFF0B5A41),
+    warning: Color(0xFF6240D9),
     onWarning: Color(0xFFFFFFFF),
-    warningContainer: Color(0xFFFEF3C7),
-    onWarningContainer: Color(0xFF78350F),
-    info: Color(0xFF1D4ED8),
+    warningContainer: Color(0xFFEFE9FF),
+    onWarningContainer: Color(0xFF4C2BB0),
+    info: Color(0xFF2349C9),
     onInfo: Color(0xFFFFFFFF),
-    infoContainer: Color(0xFFDBEAFE),
-    onInfoContainer: Color(0xFF1E3A8A),
-    neutral: Color(0xFF475569),
+    infoContainer: Color(0xFFE6EDFF),
+    onInfoContainer: Color(0xFF163299),
+    neutral: Color(0xFF5B6785),
     onNeutral: Color(0xFFFFFFFF),
-    neutralContainer: Color(0xFFF1F5F9),
-    onNeutralContainer: Color(0xFF334155),
+    neutralContainer: Color(0xFFF1F4FB),
+    onNeutralContainer: Color(0xFF0F1B3D),
     plateBackground: Color(0xFFFFFFFF),
-    plateForeground: Color(0xFF0F172A),
-    plateBorder: Color(0xFFCBD5E1),
+    plateForeground: Color(0xFF0F1B3D),
+    plateBorder: Color(0xFF0F1B3D),
   );
 
   static const AppSemanticColors dark = AppSemanticColors(
-    success: Color(0xFF4ADE80),
-    onSuccess: Color(0xFF052E16),
-    successContainer: Color(0xFF123B26),
-    onSuccessContainer: Color(0xFFBBF7D0),
-    warning: Color(0xFFFBBF24),
-    onWarning: Color(0xFF3B2300),
-    warningContainer: Color(0xFF4A3208),
-    onWarningContainer: Color(0xFFFDE68A),
-    info: Color(0xFF93C5FD),
-    onInfo: Color(0xFF0A2540),
-    infoContainer: Color(0xFF16345C),
-    onInfoContainer: Color(0xFFDBEAFE),
-    neutral: Color(0xFFB6C4D5),
-    onNeutral: Color(0xFF122033),
-    neutralContainer: Color(0xFF1A2C43),
-    onNeutralContainer: Color(0xFFD5E1F0),
-    plateBackground: Color(0xFF020A14),
-    plateForeground: Color(0xFFFFFFFF),
-    plateBorder: Color(0xFF334155),
+    success: Color(0xFF34D399),
+    onSuccess: Color(0xFF063B29),
+    successContainer: Color(0xFF10382C),
+    onSuccessContainer: Color(0xFFA7F3D0),
+    warning: Color(0xFFA78BFA),
+    onWarning: Color(0xFF24125E),
+    warningContainer: Color(0xFF281D4D),
+    onWarningContainer: Color(0xFFDDD6FE),
+    info: Color(0xFF6C92FF),
+    onInfo: Color(0xFF0B1F66),
+    infoContainer: Color(0xFF192B5C),
+    onInfoContainer: Color(0xFFDCE6FF),
+    neutral: Color(0xFF9FB0D1),
+    onNeutral: Color(0xFF0F1B3D),
+    neutralContainer: Color(0xFF182442),
+    onNeutralContainer: Color(0xFFD9E3FA),
+    plateBackground: Color(0xFFFFFFFF),
+    plateForeground: Color(0xFF0F1B3D),
+    plateBorder: Color(0xFF0F1B3D),
   );
 
   @override
@@ -182,20 +198,44 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     return AppSemanticColors(
       success: Color.lerp(success, other.success, t)!,
       onSuccess: Color.lerp(onSuccess, other.onSuccess, t)!,
-      successContainer: Color.lerp(successContainer, other.successContainer, t)!,
-      onSuccessContainer: Color.lerp(onSuccessContainer, other.onSuccessContainer, t)!,
+      successContainer: Color.lerp(
+        successContainer,
+        other.successContainer,
+        t,
+      )!,
+      onSuccessContainer: Color.lerp(
+        onSuccessContainer,
+        other.onSuccessContainer,
+        t,
+      )!,
       warning: Color.lerp(warning, other.warning, t)!,
       onWarning: Color.lerp(onWarning, other.onWarning, t)!,
-      warningContainer: Color.lerp(warningContainer, other.warningContainer, t)!,
-      onWarningContainer: Color.lerp(onWarningContainer, other.onWarningContainer, t)!,
+      warningContainer: Color.lerp(
+        warningContainer,
+        other.warningContainer,
+        t,
+      )!,
+      onWarningContainer: Color.lerp(
+        onWarningContainer,
+        other.onWarningContainer,
+        t,
+      )!,
       info: Color.lerp(info, other.info, t)!,
       onInfo: Color.lerp(onInfo, other.onInfo, t)!,
       infoContainer: Color.lerp(infoContainer, other.infoContainer, t)!,
       onInfoContainer: Color.lerp(onInfoContainer, other.onInfoContainer, t)!,
       neutral: Color.lerp(neutral, other.neutral, t)!,
       onNeutral: Color.lerp(onNeutral, other.onNeutral, t)!,
-      neutralContainer: Color.lerp(neutralContainer, other.neutralContainer, t)!,
-      onNeutralContainer: Color.lerp(onNeutralContainer, other.onNeutralContainer, t)!,
+      neutralContainer: Color.lerp(
+        neutralContainer,
+        other.neutralContainer,
+        t,
+      )!,
+      onNeutralContainer: Color.lerp(
+        onNeutralContainer,
+        other.onNeutralContainer,
+        t,
+      )!,
       plateBackground: Color.lerp(plateBackground, other.plateBackground, t)!,
       plateForeground: Color.lerp(plateForeground, other.plateForeground, t)!,
       plateBorder: Color.lerp(plateBorder, other.plateBorder, t)!,
@@ -203,40 +243,37 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   }
 }
 
-/// Bayangan lembut yang mengikuti tema (lebih gelap di dark mode).
+/// Bayangan lembut biru-korporat: 0 8 24 rgba(35,73,201,.08).
 abstract final class AppShadows {
   static List<BoxShadow> soft(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [
       BoxShadow(
-        color: scheme.shadow.withValues(alpha: isDark ? 0.30 : 0.06),
-        blurRadius: 20,
+        color: const Color(0xFF2349C9).withValues(alpha: isDark ? 0.24 : 0.08),
+        blurRadius: 24,
         offset: const Offset(0, 8),
       ),
     ];
   }
 
   static List<BoxShadow> raised(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [
       BoxShadow(
-        color: scheme.shadow.withValues(alpha: isDark ? 0.40 : 0.12),
+        color: const Color(0xFF2349C9).withValues(alpha: isDark ? 0.34 : 0.14),
         blurRadius: 28,
         offset: const Offset(0, 12),
       ),
     ];
   }
 
-  /// Dipakai pada sticky bar di bawah layar (bayangan mengarah ke atas).
+  /// Dipakai pada sticky dock di bawah layar (bayangan mengarah ke atas).
   static List<BoxShadow> top(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [
       BoxShadow(
-        color: scheme.shadow.withValues(alpha: isDark ? 0.32 : 0.07),
-        blurRadius: 18,
+        color: const Color(0xFF2349C9).withValues(alpha: isDark ? 0.28 : 0.08),
+        blurRadius: 22,
         offset: const Offset(0, -6),
       ),
     ];
@@ -260,26 +297,27 @@ extension AppThemeContext on BuildContext {
 class AppTheme {
   const AppTheme._();
 
-  // Brand colors (tetap dipertahankan agar identitas tidak berubah).
-  static const Color navyDark = Color(0xFF0F172A);
-  static const Color corporateNavy = Color(0xFF0A2540);
-  static const Color corporateBlue = Color(0xFF2563EB);
-  static const Color amberGold = Color(0xFFD97706);
-  static const Color amberLight = Color(0xFFFEF3C7);
+  // Brand & token warna utama (tanpa amber/kuning/oranye dan tanpa hitam pekat).
+  static const Color navyDark = Color(0xFF0F1B3D);
+  static const Color corporateNavy = Color(0xFF0F1B3D);
+  static const Color corporateBlue = Color(0xFF2349C9);
+  static const Color gradientBlueEnd = Color(0xFF4C74F5);
+  static const Color primaryTint = Color(0xFFE6EDFF);
+  static const Color amberGold = Color(0xFF4C74F5);
+  static const Color amberLight = Color(0xFFE6EDFF);
 
-  // Token lama yang masih dipakai view sebelum migrasi bertahap.
   static const Color surfaceWhite = Color(0xFFFFFFFF);
-  static const Color backgroundLight = Color(0xFFF6F8FB);
-  static const Color cardBorder = Color(0xFFE2E8F0);
+  static const Color backgroundLight = Color(0xFFF5F7FC);
+  static const Color cardBorder = Color(0xFFE1E7F5);
 
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF475569);
-  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color textPrimary = Color(0xFF0F1B3D);
+  static const Color textSecondary = Color(0xFF5B6785);
+  static const Color textMuted = Color(0xFF8B97B3);
 
-  static const Color successGreen = Color(0xFF16A34A);
-  static const Color successLight = Color(0xFFDCFCE7);
-  static const Color errorRed = Color(0xFFDC2626);
-  static const Color errorLight = Color(0xFFFEE2E2);
+  static const Color successGreen = Color(0xFF12A06E);
+  static const Color successLight = Color(0xFFDFF5EA);
+  static const Color errorRed = Color(0xFFD92D5A);
+  static const Color errorLight = Color(0xFFFEE4EC);
 
   // -------------------------------------------------------------------------
   // Color schemes
@@ -287,85 +325,87 @@ class AppTheme {
 
   static const ColorScheme lightScheme = ColorScheme(
     brightness: Brightness.light,
-    primary: Color(0xFF1D4ED8),
+    primary: Color(0xFF2349C9),
     onPrimary: Color(0xFFFFFFFF),
-    primaryContainer: Color(0xFFDBEAFE),
-    onPrimaryContainer: Color(0xFF1E3A8A),
-    secondary: amberGold,
+    primaryContainer: Color(0xFFE6EDFF),
+    onPrimaryContainer: Color(0xFF163299),
+    secondary: Color(0xFF4C74F5),
     onSecondary: Color(0xFFFFFFFF),
-    secondaryContainer: Color(0xFFFEF0C7),
-    onSecondaryContainer: Color(0xFF7A4100),
-    tertiary: Color(0xFF0284C7),
+    secondaryContainer: Color(0xFFEEF2FB),
+    onSecondaryContainer: Color(0xFF0F1B3D),
+    tertiary: Color(0xFF6240D9),
     onTertiary: Color(0xFFFFFFFF),
-    tertiaryContainer: Color(0xFFDBEAFE),
-    onTertiaryContainer: Color(0xFF1E3A8A),
-    error: Color(0xFFD92D20),
+    tertiaryContainer: Color(0xFFEFE9FF),
+    onTertiaryContainer: Color(0xFF4C2BB0),
+    error: Color(0xFFD92D5A),
     onError: Color(0xFFFFFFFF),
-    errorContainer: Color(0xFFFEE4E2),
-    onErrorContainer: Color(0xFF7A271A),
+    errorContainer: Color(0xFFFEE4EC),
+    onErrorContainer: Color(0xFF881337),
     surface: Color(0xFFFFFFFF),
-    onSurface: Color(0xFF0F172A),
+    onSurface: Color(0xFF0F1B3D),
     surfaceContainerLowest: Color(0xFFFFFFFF),
-    surfaceContainerLow: Color(0xFFF6F8FB),
-    surfaceContainer: Color(0xFFF1F5F9),
-    surfaceContainerHigh: Color(0xFFE9EFF6),
-    surfaceContainerHighest: Color(0xFFDFE7F0),
-    onSurfaceVariant: Color(0xFF475569),
-    outline: Color(0xFFCBD5E1),
-    outlineVariant: Color(0xFFE2E8F0),
-    shadow: Color(0xFF0A2540),
-    scrim: Color(0xFF000000),
-    inverseSurface: Color(0xFF0F172A),
-    onInverseSurface: Color(0xFFF8FAFC),
-    inversePrimary: Color(0xFF9DC1F0),
+    surfaceContainerLow: Color(0xFFF5F7FC),
+    surfaceContainer: Color(0xFFF1F4FB),
+    surfaceContainerHigh: Color(0xFFE9EEF9),
+    surfaceContainerHighest: Color(0xFFE1E7F5),
+    onSurfaceVariant: Color(0xFF5B6785),
+    outline: Color(0xFFD5DCEE),
+    outlineVariant: Color(0xFFE1E7F5),
+    shadow: Color(0xFF2349C9),
+    scrim: Color(0xFF0F1B3D),
+    inverseSurface: Color(0xFF0F1B3D),
+    onInverseSurface: Color(0xFFF5F7FC),
+    inversePrimary: Color(0xFFA7BFFF),
   );
 
   static const ColorScheme darkScheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Color(0xFFF2B357),
-    onPrimary: Color(0xFF2B1B00),
-    primaryContainer: Color(0xFF4A3208),
-    onPrimaryContainer: Color(0xFFFFDFA8),
-    secondary: Color(0xFF9DC1F0),
-    onSecondary: Color(0xFF06203A),
-    secondaryContainer: Color(0xFF1B3A5C),
-    onSecondaryContainer: Color(0xFFD6E6FF),
-    tertiary: Color(0xFF93C5FD),
-    onTertiary: Color(0xFF0A2540),
-    tertiaryContainer: Color(0xFF16345C),
-    onTertiaryContainer: Color(0xFFDBEAFE),
-    error: Color(0xFFFFB4AB),
-    onError: Color(0xFF690005),
-    errorContainer: Color(0xFF93000A),
-    onErrorContainer: Color(0xFFFFDAD6),
-    surface: Color(0xFF0B1828),
-    onSurface: Color(0xFFE6EEF8),
-    surfaceContainerLowest: Color(0xFF071220),
-    surfaceContainerLow: Color(0xFF081523),
-    surfaceContainer: Color(0xFF102033),
-    surfaceContainerHigh: Color(0xFF172A40),
-    surfaceContainerHighest: Color(0xFF1F344C),
-    onSurfaceVariant: Color(0xFFA7B7CA),
-    outline: Color(0xFF3A4E68),
-    outlineVariant: Color(0xFF243650),
-    shadow: Color(0xFF000000),
-    scrim: Color(0xFF000000),
-    inverseSurface: Color(0xFFE6EEF8),
-    onInverseSurface: Color(0xFF0B1828),
-    inversePrimary: Color(0xFF0A2540),
+    primary: Color(0xFF4C74F5),
+    onPrimary: Color(0xFFFFFFFF),
+    primaryContainer: Color(0xFF192B5C),
+    onPrimaryContainer: Color(0xFFDCE6FF),
+    secondary: Color(0xFF7B9BFF),
+    onSecondary: Color(0xFF0B1942),
+    secondaryContainer: Color(0xFF182442),
+    onSecondaryContainer: Color(0xFFD9E3FA),
+    tertiary: Color(0xFFA78BFA),
+    onTertiary: Color(0xFF24125E),
+    tertiaryContainer: Color(0xFF281D4D),
+    onTertiaryContainer: Color(0xFFDDD6FE),
+    error: Color(0xFFFF6B8B),
+    onError: Color(0xFF4C0519),
+    errorContainer: Color(0xFF5E1127),
+    onErrorContainer: Color(0xFFFFD6DF),
+    surface: Color(0xFF131E3A),
+    onSurface: Color(0xFFEEF3FF),
+    surfaceContainerLowest: Color(0xFF0B1326),
+    surfaceContainerLow: Color(0xFF0D162C),
+    surfaceContainer: Color(0xFF182442),
+    surfaceContainerHigh: Color(0xFF1F2D50),
+    surfaceContainerHighest: Color(0xFF283860),
+    onSurfaceVariant: Color(0xFF9FB0D1),
+    outline: Color(0xFF31436E),
+    outlineVariant: Color(0xFF243358),
+    shadow: Color(0xFF080E1E),
+    scrim: Color(0xFF080E1E),
+    inverseSurface: Color(0xFFEEF3FF),
+    onInverseSurface: Color(0xFF0F1B3D),
+    inversePrimary: Color(0xFF2349C9),
   );
 
   // -------------------------------------------------------------------------
   // ThemeData
   // -------------------------------------------------------------------------
 
-  static final ThemeData lightTheme = _build(lightScheme, AppSemanticColors.light);
+  static final ThemeData lightTheme = _build(
+    lightScheme,
+    AppSemanticColors.light,
+  );
   static final ThemeData darkTheme = _build(darkScheme, AppSemanticColors.dark);
 
   static ThemeData _build(ColorScheme scheme, AppSemanticColors semantic) {
-    final isDark = scheme.brightness == Brightness.dark;
     final textTheme = _textTheme(scheme);
-    final fieldFill = isDark ? scheme.surfaceContainer : scheme.surface;
+    final fieldFill = scheme.surfaceContainer;
     final overlay = overlayStyle(scheme.brightness, scheme);
 
     return ThemeData(
@@ -411,13 +451,22 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: fieldFill,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        labelStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-        floatingLabelStyle: textTheme.labelLarge?.copyWith(color: scheme.primary),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 18,
+        ),
+        labelStyle: textTheme.bodyMedium?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        floatingLabelStyle: textTheme.labelLarge?.copyWith(
+          color: scheme.primary,
+        ),
         hintStyle: textTheme.bodyMedium?.copyWith(
           color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
         ),
-        helperStyle: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        helperStyle: textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
         helperMaxLines: 2,
         errorStyle: textTheme.bodySmall?.copyWith(
           color: scheme.error,
@@ -426,14 +475,20 @@ class AppTheme {
         errorMaxLines: 3,
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
-        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        suffixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        border: _inputBorder(scheme.outlineVariant),
-        enabledBorder: _inputBorder(scheme.outline),
-        disabledBorder: _inputBorder(scheme.outlineVariant.withValues(alpha: 0.6)),
-        focusedBorder: _inputBorder(scheme.primary, width: 2),
-        errorBorder: _inputBorder(scheme.error),
-        focusedErrorBorder: _inputBorder(scheme.error, width: 2),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 48,
+          minHeight: 48,
+        ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 48,
+          minHeight: 48,
+        ),
+        border: _inputBorder(Colors.transparent),
+        enabledBorder: _inputBorder(Colors.transparent),
+        disabledBorder: _inputBorder(Colors.transparent),
+        focusedBorder: _inputBorder(scheme.primary, width: 1.5),
+        errorBorder: _inputBorder(scheme.error, width: 1.2),
+        focusedErrorBorder: _inputBorder(scheme.error, width: 1.5),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -544,7 +599,9 @@ class AppTheme {
         dragHandleColor: scheme.outline,
         dragHandleSize: const Size(40, 4),
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -553,7 +610,9 @@ class AppTheme {
         elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         titleTextStyle: textTheme.titleLarge,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.xl),
         ),
@@ -561,7 +620,9 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: scheme.inverseSurface,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: scheme.onInverseSurface),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: scheme.onInverseSurface,
+        ),
         actionTextColor: scheme.inversePrimary,
         elevation: 6,
         insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -629,7 +690,9 @@ class AppTheme {
           color: scheme.inverseSurface,
           borderRadius: BorderRadius.circular(AppRadius.xs),
         ),
-        textStyle: textTheme.bodySmall?.copyWith(color: scheme.onInverseSurface),
+        textStyle: textTheme.bodySmall?.copyWith(
+          color: scheme.onInverseSurface,
+        ),
       ),
       badgeTheme: BadgeThemeData(
         backgroundColor: scheme.error,
@@ -806,8 +869,8 @@ class AppTheme {
     ColorScheme? scheme,
   ]) {
     final isDark = brightness == Brightness.dark;
-    final surface = scheme?.surface ??
-        (isDark ? darkScheme.surface : lightScheme.surface);
+    final surface =
+        scheme?.surface ?? (isDark ? darkScheme.surface : lightScheme.surface);
 
     return SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -815,8 +878,9 @@ class AppTheme {
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: surface,
       systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
       systemStatusBarContrastEnforced: false,
       systemNavigationBarContrastEnforced: false,
     );

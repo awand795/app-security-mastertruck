@@ -44,7 +44,8 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final borderRadius = BorderRadius.circular(radius);
-    final effectiveBorder = borderColor ??
+    final effectiveBorder =
+        borderColor ??
         (gradient != null ? Colors.transparent : scheme.outlineVariant);
 
     final effectivePadding = accentColor == null
@@ -74,7 +75,9 @@ class AppCard extends StatelessWidget {
     }
 
     final card = Material(
-      color: gradient == null ? (backgroundColor ?? scheme.surface) : Colors.transparent,
+      color: gradient == null
+          ? (backgroundColor ?? scheme.surface)
+          : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: borderRadius,
         side: BorderSide(color: effectiveBorder, width: borderWidth),

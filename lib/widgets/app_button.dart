@@ -61,7 +61,7 @@ class _AppButtonState extends State<AppButton> {
       (widget.variant == AppButtonVariant.primary ||
           widget.variant == AppButtonVariant.danger);
 
-  double get _height => widget.size == AppButtonSize.large ? 54 : 48;
+  double get _height => widget.size == AppButtonSize.large ? 50 : 44;
 
   Future<void> _fireHaptic() async {
     if (!_shouldHaptic) return;
@@ -207,7 +207,46 @@ class _AppButtonState extends State<AppButton> {
     );
 
     Widget button;
-    if (background != null) {
+    if (widget.variant == AppButtonVariant.primary && _enabled) {
+      button = DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: AppGradients.primary,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF2349C9).withValues(alpha: 0.28),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: shape,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: _handleTap,
+            customBorder: shape,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: 64, minHeight: _height),
+              child: Padding(
+                padding: padding,
+                child: DefaultTextStyle(
+                  style:
+                      Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontSize: widget.size == AppButtonSize.large ? 15 : 14,
+                        fontWeight: FontWeight.w700,
+                        color: foreground,
+                      ) ??
+                      TextStyle(color: foreground),
+                  child: content,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (background != null) {
       button = FilledButton(
         onPressed: _enabled ? _handleTap : null,
         style: buttonStyle,

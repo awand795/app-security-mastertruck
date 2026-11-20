@@ -9,6 +9,7 @@ import 'app_button.dart';
 import 'app_card.dart';
 import 'info_row.dart';
 import 'plate_badge.dart';
+import 'status_chip.dart';
 import 'sticky_bottom_bar.dart';
 
 /// Struk digital full-page untuk check-in dan check-out.
@@ -191,319 +192,419 @@ class _GatePassDialogState extends State<GatePassDialog> {
         : 'Tiket masuk berhasil diterbitkan.';
     final codeLabel = _isExitPass ? 'Nomor memo' : 'Nomor tiket';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backdropColor = isDark
+        ? scheme.surfaceContainerLow
+        : const Color(0xFFEEF3FF);
+
     return Dialog(
       insetPadding: EdgeInsets.zero,
-      backgroundColor: scheme.surfaceContainerLow,
+      backgroundColor: backdropColor,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       clipBehavior: Clip.antiAlias,
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _finish(context);
-        },
-        child: Column(
-          children: [
-            Expanded(
-              child: SafeArea(
-                bottom: false,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    AppSpacing.xl,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 520),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Image.asset(
-                                'assets/images/master-truck-logo-transparent.png',
-                                height: 28,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Icon(
-                                  Icons.shield_rounded,
-                                  color: scheme.primary,
-                                  size: 24,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isDark ? null : AppGradients.softBlueBackdrop,
+        ),
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) _finish(context);
+          },
+          child: Column(
+            children: [
+              Expanded(
+                child: SafeArea(
+                  bottom: false,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      AppSpacing.xl,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Image.asset(
+                                  'assets/images/darkogate-logo-transparent.png',
+                                  height: 28,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.shield_rounded,
+                                    color: scheme.primary,
+                                    size: 24,
+                                  ),
                                 ),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'DarkoGate KIM 3',
+                                        style: texts.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      Text(
+                                        _effectiveTitle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: texts.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Tutup',
+                                  onPressed: () => _finish(context),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            _SuccessMark(isExit: _isExitPass),
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              heroTitle,
+                              textAlign: TextAlign.center,
+                              style: texts.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
                               ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Column(
+                            ),
+                            const SizedBox(height: AppSpacing.xxs),
+                            Text(
+                              heroMessage,
+                              textAlign: TextAlign.center,
+                              style: texts.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (widget.uploadWarning != null) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              Container(
+                                padding: const EdgeInsets.all(AppSpacing.sm),
+                                decoration: BoxDecoration(
+                                  color: semantic.warningContainer,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.md,
+                                  ),
+                                  border: Border.all(
+                                    color: semantic.warning.withValues(
+                                      alpha: 0.28,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Master Truck KIM 3',
-                                      style: texts.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                                    Icon(
+                                      Icons.cloud_off_rounded,
+                                      size: 20,
+                                      color: semantic.onWarningContainer,
                                     ),
-                                    Text(
-                                      _effectiveTitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: texts.bodySmall,
+                                    const SizedBox(width: AppSpacing.xs),
+                                    Expanded(
+                                      child: Text(
+                                        widget.uploadWarning!,
+                                        style: texts.bodySmall?.copyWith(
+                                          color: semantic.onWarningContainer,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                              IconButton(
-                                tooltip: 'Tutup',
-                                onPressed: () => _finish(context),
-                                icon: const Icon(Icons.close_rounded),
-                              ),
                             ],
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          _SuccessMark(isExit: _isExitPass),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            heroTitle,
-                            textAlign: TextAlign.center,
-                            style: texts.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.xxs),
-                          Text(
-                            heroMessage,
-                            textAlign: TextAlign.center,
-                            style: texts.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                          if (widget.uploadWarning != null) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            Container(
-                              padding: const EdgeInsets.all(AppSpacing.sm),
-                              decoration: BoxDecoration(
-                                color: semantic.warningContainer,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.md,
-                                ),
-                                border: Border.all(
-                                  color: semantic.warning.withValues(
-                                    alpha: 0.28,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: AppSpacing.lg),
+                            AppCard(
+                              padding: const EdgeInsets.all(AppSpacing.lg),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Icon(
-                                    Icons.cloud_off_rounded,
-                                    size: 20,
-                                    color: semantic.onWarningContainer,
+                                  Center(
+                                    child: PlateBadge(
+                                      widget.noPolisi,
+                                      size: PlateBadgeSize.xlarge,
+                                    ),
                                   ),
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Expanded(
-                                    child: Text(
-                                      widget.uploadWarning!,
-                                      style: texts.bodySmall?.copyWith(
-                                        color: semantic.onWarningContainer,
-                                        fontWeight: FontWeight.w600,
+                                  const SizedBox(height: AppSpacing.lg),
+                                  Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(
+                                        AppSpacing.sm,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.md,
+                                        ),
+                                        border: Border.all(
+                                          color: scheme.outlineVariant,
+                                        ),
+                                      ),
+                                      child: QrImageView(
+                                        data: _effectiveCode,
+                                        version: QrVersions.auto,
+                                        size: 180,
+                                        eyeStyle: const QrEyeStyle(
+                                          eyeShape: QrEyeShape.square,
+                                          color: Color(0xFF0F1B3D),
+                                        ),
+                                        dataModuleStyle:
+                                            const QrDataModuleStyle(
+                                              dataModuleShape:
+                                                  QrDataModuleShape.square,
+                                              color: Color(0xFF0F1B3D),
+                                            ),
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  Text(
+                                    _effectiveCode,
+                                    textAlign: TextAlign.center,
+                                    style: AppTheme.plateStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.2,
+                                    ).copyWith(color: scheme.onSurface),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    '$codeLabel • Tunjukkan QR ini kepada petugas gerbang.',
+                                    textAlign: TextAlign.center,
+                                    style: texts.bodySmall,
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  _TicketPerforation(
+                                    notchColor: backdropColor,
+                                    lineColor: scheme.outlineVariant,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  InfoRow(
+                                    label: 'Waktu',
+                                    value: nowFormatted,
+                                    dense: true,
+                                  ),
+                                  InfoRow(
+                                    label: 'Pengemudi',
+                                    value: _effectiveDriver,
+                                    dense: true,
+                                  ),
+                                  if (widget.customerName != null &&
+                                      widget.customerName!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Pelanggan',
+                                      value: widget.customerName!,
+                                      dense: true,
+                                    ),
+                                  if (widget.tipeKunjungan != null &&
+                                      widget.tipeKunjungan!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Tujuan',
+                                      value: widget.tipeKunjungan!,
+                                      dense: true,
+                                    ),
+                                  if (widget.keluhan != null &&
+                                      widget.keluhan!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Keluhan',
+                                      value: widget.keluhan!,
+                                      dense: true,
+                                    ),
+                                  if (widget.waktuMasuk != null &&
+                                      widget.waktuMasuk!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Masuk',
+                                      value: widget.waktuMasuk!,
+                                      dense: true,
+                                    ),
+                                  if (widget.waktuKeluar != null &&
+                                      widget.waktuKeluar!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Keluar',
+                                      value: widget.waktuKeluar!,
+                                      dense: true,
+                                    ),
+                                  if (widget.spkNumber != null &&
+                                      widget.spkNumber!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'No. SPK',
+                                      value: widget.spkNumber!,
+                                      dense: true,
+                                    ),
+                                  if (widget.invoiceNumber != null &&
+                                      widget.invoiceNumber!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              'No. Invoice',
+                                              style: texts.bodySmall?.copyWith(
+                                                color: scheme.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            widget.invoiceNumber!,
+                                            style: texts.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(width: AppSpacing.xs),
+                                          const StatusChip(
+                                            AppStatus.paid,
+                                            label: 'LUNAS',
+                                            compact: true,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (widget.petugasSecurity != null &&
+                                      widget.petugasSecurity!.isNotEmpty)
+                                    InfoRow(
+                                      label: 'Petugas',
+                                      value: widget.petugasSecurity!,
+                                      dense: true,
+                                    ),
                                 ],
                               ),
                             ),
-                          ],
-                          const SizedBox(height: AppSpacing.lg),
-                          AppCard(
-                            padding: const EdgeInsets.all(AppSpacing.lg),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                            const SizedBox(height: AppSpacing.sm),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Center(
-                                  child: PlateBadge(
-                                    widget.noPolisi,
-                                    size: PlateBadgeSize.xlarge,
+                                Icon(
+                                  Icons.verified_outlined,
+                                  size: 16,
+                                  color: semantic.success,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'Dokumen digital sah. Simpan sebagai bukti kendaraan.',
+                                    textAlign: TextAlign.center,
+                                    style: texts.bodySmall,
                                   ),
                                 ),
-                                const SizedBox(height: AppSpacing.lg),
-                                Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(
-                                      AppSpacing.sm,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(
-                                        AppRadius.md,
-                                      ),
-                                      border: Border.all(
-                                        color: scheme.outlineVariant,
-                                      ),
-                                    ),
-                                    child: QrImageView(
-                                      data: _effectiveCode,
-                                      version: QrVersions.auto,
-                                      size: 180,
-                                      eyeStyle: const QrEyeStyle(
-                                        eyeShape: QrEyeShape.square,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                      dataModuleStyle: const QrDataModuleStyle(
-                                        dataModuleShape:
-                                            QrDataModuleShape.square,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: AppSpacing.sm),
-                                Text(
-                                  _effectiveCode,
-                                  textAlign: TextAlign.center,
-                                  style: AppTheme.plateStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.2,
-                                  ).copyWith(color: scheme.onSurface),
-                                ),
-                                const SizedBox(height: AppSpacing.xxs),
-                                Text(
-                                  '$codeLabel • Tunjukkan QR ini kepada petugas gerbang.',
-                                  textAlign: TextAlign.center,
-                                  style: texts.bodySmall,
-                                ),
-                                const SizedBox(height: AppSpacing.md),
-                                Divider(color: scheme.outlineVariant),
-                                const SizedBox(height: AppSpacing.xs),
-                                InfoRow(
-                                  label: 'Waktu',
-                                  value: nowFormatted,
-                                  dense: true,
-                                ),
-                                InfoRow(
-                                  label: 'Pengemudi',
-                                  value: _effectiveDriver,
-                                  dense: true,
-                                ),
-                                if (widget.customerName != null &&
-                                    widget.customerName!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Pelanggan',
-                                    value: widget.customerName!,
-                                    dense: true,
-                                  ),
-                                if (widget.tipeKunjungan != null &&
-                                    widget.tipeKunjungan!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Tujuan',
-                                    value: widget.tipeKunjungan!,
-                                    dense: true,
-                                  ),
-                                if (widget.keluhan != null &&
-                                    widget.keluhan!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Keluhan',
-                                    value: widget.keluhan!,
-                                    dense: true,
-                                  ),
-                                if (widget.waktuMasuk != null &&
-                                    widget.waktuMasuk!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Masuk',
-                                    value: widget.waktuMasuk!,
-                                    dense: true,
-                                  ),
-                                if (widget.waktuKeluar != null &&
-                                    widget.waktuKeluar!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Keluar',
-                                    value: widget.waktuKeluar!,
-                                    dense: true,
-                                  ),
-                                if (widget.spkNumber != null &&
-                                    widget.spkNumber!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'No. SPK',
-                                    value: widget.spkNumber!,
-                                    dense: true,
-                                  ),
-                                if (widget.invoiceNumber != null &&
-                                    widget.invoiceNumber!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'No. Invoice',
-                                    value: widget.invoiceNumber!,
-                                    dense: true,
-                                  ),
-                                if (widget.petugasSecurity != null &&
-                                    widget.petugasSecurity!.isNotEmpty)
-                                  InfoRow(
-                                    label: 'Petugas',
-                                    value: widget.petugasSecurity!,
-                                    dense: true,
-                                  ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.verified_outlined,
-                                size: 16,
-                                color: semantic.success,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Dokumen digital sah. Simpan sebagai bukti kendaraan.',
-                                  textAlign: TextAlign.center,
-                                  style: texts.bodySmall,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            StickyBottomBar(
-              maxWidth: 520,
-              hint: _isExitPass
-                  ? 'Pastikan kendaraan sudah keluar gerbang.'
-                  : 'Simpan tiket ini sampai kendaraan keluar.',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Bagikan',
-                      icon: Icons.share_outlined,
-                      variant: AppButtonVariant.secondary,
-                      size: AppButtonSize.medium,
-                      onPressed: () => _showShareSheet(
-                        context,
-                        code: _effectiveCode,
-                        title: _effectiveTitle,
+              StickyBottomBar(
+                maxWidth: 520,
+                hint: _isExitPass
+                    ? 'Pastikan kendaraan sudah keluar gerbang.'
+                    : 'Simpan tiket ini sampai kendaraan keluar.',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Bagikan',
+                        icon: Icons.share_outlined,
+                        variant: AppButtonVariant.secondary,
+                        size: AppButtonSize.medium,
+                        onPressed: () => _showShareSheet(
+                          context,
+                          code: _effectiveCode,
+                          title: _effectiveTitle,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Selesai',
-                      icon: Icons.check_rounded,
-                      size: AppButtonSize.medium,
-                      onPressed: () => _finish(context),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Selesai',
+                        icon: Icons.check_rounded,
+                        size: AppButtonSize.medium,
+                        onPressed: () => _finish(context),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketPerforation extends StatelessWidget {
+  const _TicketPerforation({required this.notchColor, required this.lineColor});
+
+  final Color notchColor;
+  final Color lineColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const dashWidth = 6.0;
+              const dashSpace = 5.0;
+              final count = (constraints.maxWidth / (dashWidth + dashSpace))
+                  .floor();
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(
+                  count,
+                  (_) => Container(
+                    width: dashWidth,
+                    height: 1.5,
+                    color: lineColor,
                   ),
-                ],
+                ),
+              );
+            },
+          ),
+          Positioned(
+            left: -AppSpacing.lg - 12,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: notchColor,
+                shape: BoxShape.circle,
               ),
             ),
-          ],
-        ),
+          ),
+          Positioned(
+            right: -AppSpacing.lg - 12,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: notchColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

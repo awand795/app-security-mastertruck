@@ -43,9 +43,7 @@ void main() {
     await _loadLocalFont('${fontDir}PlusJakartaSans-SemiBold.ttf', [
       '${pjs}_600',
     ]);
-    await _loadLocalFont('${fontDir}PlusJakartaSans-Bold.ttf', [
-      '${pjs}_700',
-    ]);
+    await _loadLocalFont('${fontDir}PlusJakartaSans-Bold.ttf', ['${pjs}_700']);
     await _loadLocalFont('${fontDir}PlusJakartaSans-ExtraBold.ttf', [
       '${pjs}_800',
     ]);
@@ -82,12 +80,22 @@ void main() {
   });
 
   testWidgets('phone light - login', (tester) async {
-    await _pump(tester, const Size(360, 800), Brightness.light, const LoginView());
+    await _pump(
+      tester,
+      const Size(360, 800),
+      Brightness.light,
+      const LoginView(),
+    );
     await _capture(tester, 'phone_light_login.png');
   });
 
   testWidgets('phone dark - login', (tester) async {
-    await _pump(tester, const Size(360, 800), Brightness.dark, const LoginView());
+    await _pump(
+      tester,
+      const Size(360, 800),
+      Brightness.dark,
+      const LoginView(),
+    );
     await _capture(tester, 'phone_dark_login.png');
   });
 
@@ -240,9 +248,7 @@ Future<void> _pump(
   );
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(
-    _PreviewApp(brightness: brightness, home: home),
-  );
+  await tester.pumpWidget(_PreviewApp(brightness: brightness, home: home));
   await tester.pump(const Duration(milliseconds: 50));
 
   // Pastikan aset logo sudah ter-decode sebelum capture (terutama frame pertama).
@@ -282,8 +288,9 @@ class _PreviewApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode:
-          brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+      themeMode: brightness == Brightness.dark
+          ? ThemeMode.dark
+          : ThemeMode.light,
       home: home,
     );
   }

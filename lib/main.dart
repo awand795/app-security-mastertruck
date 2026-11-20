@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'config/theme.dart';
 import 'services/auth_service.dart';
+import 'views/gate_select_view.dart';
 import 'views/home_nav_view.dart';
 import 'views/login_view.dart';
 
@@ -14,16 +15,16 @@ Future<void> main() async {
   GoogleFonts.config.allowRuntimeFetching = false;
   await initializeDateFormatting('id_ID');
   await AuthService.loadSession();
-  runApp(const SecurityMasterTruckApp());
+  runApp(const DarkoGateApp());
 }
 
-class SecurityMasterTruckApp extends StatelessWidget {
-  const SecurityMasterTruckApp({super.key});
+class DarkoGateApp extends StatelessWidget {
+  const DarkoGateApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MasterTruck Security',
+      title: 'DarkoGate',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
@@ -38,7 +39,11 @@ class SecurityMasterTruckApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: AuthService.isAuthenticated ? const HomeNavView() : const LoginView(),
+      home: !AuthService.isAuthenticated
+          ? const LoginView()
+          : (AuthService.hasGate
+                ? const HomeNavView()
+                : const GateSelectView()),
     );
   }
 }
