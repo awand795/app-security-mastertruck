@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
@@ -14,12 +13,16 @@ class AnprResult {
   /// Semua kandidat plat yang terbaca, terurut dari skor tertinggi.
   final List<String> candidates;
 
+  /// Pesan kesalahan bila OCR gagal dijalankan (bukan sekadar tidak ada teks).
+  final String? error;
+
   AnprResult({
     required this.success,
     this.plate,
     this.rawText,
     this.confidence = 0.0,
     this.candidates = const [],
+    this.error,
   });
 }
 
@@ -373,6 +376,10 @@ class AnprService {
   /// Semua blok teks dinilai, bukan hanya blok pertama, lalu kandidat dengan
   /// skor pola tertinggi yang dipakai. Blok teks yang besar (plat yang lebih
   /// dekat/terlihat jelas di bingkai) mendapat bonus kecil.
+  ///
+  /// File [filePath] **tidak** dihapus di sini. Pemanggil yang mengelola
+  /// siklus hidup file sementara, karena crop yang sama sering dipakai lagi
+  /// untuk percobaan warna dibalik (plat hitam berhuruf putih).
   static Future<AnprResult> detectFromImageFile(String filePath) async {
     try {
       final inputImage = InputImage.fromFilePath(filePath);
@@ -414,13 +421,8 @@ class AnprService {
         confidence: (0.7 + bestPlate.value * 0.01).clamp(0.7, 0.95),
         candidates: ranked.map((entry) => entry.key).toList(),
       );
-    } catch (_) {
-      return AnprResult(success: false);
-    } finally {
-      try {
-        final file = File(filePath);
-        if (await file.exists()) await file.delete();
-      } catch (_) {}
+    } catch (e) {
+      return AnprResult(success: false, error: e.toString());
     }
   }
 }

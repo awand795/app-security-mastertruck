@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -34,17 +35,78 @@ class PlateDetection {
       'score=${score.toStringAsFixed(3)})';
 }
 
-/// Transformasi letterbox gambar asli ke input model persegi.
-class LetterboxTransform {
-  const LetterboxTransform({
-    required this.scale,
-    required this.padX,
-    required this.padY,
+/// Satu pass deteksi: sebagian gambar asli (koordinat piksel) yang di-resize
+/// penuh menjadi input model persegi 416x416.
+///
+/// Model ini **tidak** cocok dengan letterbox (padding abu-abu). Diukur pada
+/// foto plat asli: letterbox memberi skor 0.00, sedangkan resize penuh
+/// (stretch, rasio aspek diabaikan) memberi 0.72. Karena itu setiap pass
+/// me-resize area sumber tepat ke 416x416 tanpa padding.
+class DetectionPass {
+  const DetectionPass({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
   });
 
-  final double scale;
-  final double padX;
-  final double padY;
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+
+  /// Satu pass untuk satu frame.
+  ///
+  /// Bila [roi] diberikan (koordinat ternormalisasi 0..1), pass hanya memuat
+  /// area panduan tersebut. Area panduan yang sempit membuat plat menempati
+  /// porsi jauh lebih besar pada input 416x416 sehingga skor deteksi naik
+  /// (diukur: plat 140 px pada frame 720x1280 memberi 0.41 untuk frame penuh,
+  /// tetapi 0.62 pada area panduan 96% x 40%). Satu pass juga memangkas biaya
+  /// inferensi menjadi separuh.
+  static List<DetectionPass> plan(
+    int imageWidth,
+    int imageHeight, {
+    ui.Rect? roi,
+  }) {
+    final w = imageWidth.toDouble();
+    final h = imageHeight.toDouble();
+    if (w <= 0 || h <= 0) return const [];
+
+    if (roi != null) {
+      final left = roi.left.clamp(0.0, 1.0) * w;
+      final top = roi.top.clamp(0.0, 1.0) * h;
+      final right = roi.right.clamp(0.0, 1.0) * w;
+      final bottom = roi.bottom.clamp(0.0, 1.0) * h;
+      if (right - left >= 16 && bottom - top >= 16) {
+        return [
+          DetectionPass(
+            left: left,
+            top: top,
+            width: right - left,
+            height: bottom - top,
+          ),
+        ];
+      }
+    }
+
+    return [DetectionPass(left: 0, top: 0, width: w, height: h)];
+  }
+
+  /// Kembalikan kotak dari koordinat input model 416x416 ke koordinat gambar
+  /// asli, dibatasi pada area pass ini.
+  PlateDetection toImage(PlateDetection detection) {
+    final scaleX = width / PlateDetector.inputSize;
+    final scaleY = height / PlateDetector.inputSize;
+    final maxX = left + width;
+    final maxY = top + height;
+    return PlateDetection(
+      left: (left + detection.left * scaleX).clamp(left, maxX),
+      top: (top + detection.top * scaleY).clamp(top, maxY),
+      right: (left + detection.right * scaleX).clamp(left, maxX),
+      bottom: (top + detection.bottom * scaleY).clamp(top, maxY),
+      score: detection.score,
+    );
+  }
 }
 
 /// Hasil crop area plat yang siap di-OCR.
@@ -53,19 +115,25 @@ class PlateCropResult {
     required this.path,
     required this.box,
     required this.score,
+    this.previewBytes,
+    this.width = 0,
+    this.height = 0,
   });
 
   final String path;
   final PlateDetection box;
   final double score;
+  final Uint8List? previewBytes;
+  final int width;
+  final int height;
 }
 
 /// Detektor plat on-device (YOLOv8n hasil konversi TFLite).
 ///
 /// Model masukan 1x416x416x3 (NHWC, RGB, skala 0..1) dan keluaran 1x5x3549
 /// (cx, cy, w, h, skor untuk satu kelas "plat"). Alur deteksi:
-/// letterbox -> inferensi -> decode -> NMS -> crop area plat, lalu crop
-/// diperbesar agar OCR ML Kit mudah membaca plat yang jauh.
+/// resize stretch area panduan -> inferensi -> decode -> NMS -> crop area
+/// plat, lalu crop diperbesar agar OCR ML Kit mudah membaca plat yang jauh.
 ///
 /// Semua metode murni (letterbox, decode, NMS, mapping kotak) dipisah agar
 /// bisa diuji tanpa model maupun kamera.
@@ -85,6 +153,17 @@ class PlateDetector {
   Future<void>? _loading;
   bool _failed = false;
 
+  /// Pesan terakhir saat model gagal dimuat. Ditampilkan di layar scanner
+  /// supaya penyebabnya (asset hilang, library native tidak ada, bentuk
+  /// keluaran tidak cocok) bisa dibaca langsung tanpa logcat.
+  String? lastLoadError;
+
+  /// Skor deteksi tertinggi dari frame terakhir yang diproses.
+  double lastBestScore = 0;
+
+  /// Jumlah kotak yang lolos ambang sebelum NMS pada frame terakhir.
+  int lastRawCount = 0;
+
   bool get isReady => _interpreter != null;
 
   /// True bila model gagal dimuat (asset hilang/rusak). Pemanggil harus
@@ -97,121 +176,266 @@ class PlateDetector {
   }
 
   Future<void> _load() async {
+    Interpreter? interpreter;
+    InterpreterOptions? options;
     try {
-      final interpreter = await Interpreter.fromAsset(
-        assetPath,
-        options: InterpreterOptions()..threads = 2,
-      );
-      final shape = interpreter.getOutputTensor(0).shape;
-      final validShape =
-          shape.length == 3 &&
-          shape[1] == valuesPerAnchor &&
-          shape[2] == numAnchors;
-      if (validShape) {
+      // LiteRT sudah mengaktifkan akselerasi CPU bawaan; jangan pasang
+      // XNNPackDelegate manual lewat FFI karena berisiko crash native
+      // (SIGSEGV/SIGABRT) saat pembuatan interpreter di beberapa perangkat.
+      options = InterpreterOptions()..threads = 4;
+      interpreter = await Interpreter.fromAsset(assetPath, options: options);
+      final inputShape = interpreter.getInputTensor(0).shape;
+      final outputShape = interpreter.getOutputTensor(0).shape;
+      final validInput =
+          inputShape.length == 4 &&
+          inputShape[1] == inputSize &&
+          inputShape[2] == inputSize &&
+          inputShape[3] == 3;
+      final validOutput =
+          outputShape.length == 3 &&
+          outputShape[1] == valuesPerAnchor &&
+          outputShape[2] == numAnchors;
+      if (validInput && validOutput) {
         _interpreter = interpreter;
       } else {
         interpreter.close();
+        interpreter = null;
         _failed = true;
+        lastLoadError =
+            'bentuk tensor tidak cocok: in=$inputShape out=$outputShape';
       }
-    } catch (_) {
+    } catch (e) {
+      interpreter?.close();
       _failed = true;
+      lastLoadError = e.toString();
+    } finally {
+      options?.delete();
     }
   }
 
-  /// Deteksi plat pada file gambar dan hasilkan crop PNG yang sudah
-  /// diperbesar. Mengembalikan null bila model tidak tersedia atau tidak ada
-  /// plat yang cukup yakin.
-  Future<PlateCropResult?> detectAndCrop(String imagePath) async {
+  /// Deteksi semua kotak plat pada sebuah file gambar tanpa memotongnya.
+  /// Dipakai untuk diagnostik (menampilkan skor terbaik di layar scanner)
+  /// dan untuk pengujian pipeline inferensi yang sebenarnya.
+  Future<List<PlateDetection>> detect(
+    String imagePath, {
+    double minScore = defaultScoreThreshold,
+    ui.Rect? roi,
+  }) async {
     await ensureLoaded();
     final interpreter = _interpreter;
-    if (interpreter == null) return null;
+    if (interpreter == null) return const [];
 
     ui.Image? image;
     ui.Codec? codec;
     try {
       final bytes = await File(imagePath).readAsBytes();
       codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      image = frame.image;
-
-      final detections = await _detectImage(interpreter, image);
-      if (detections.isEmpty) return null;
-
-      final best = detections.first;
-      final cropPath = await _cropToPng(image, best);
-      if (cropPath == null) return null;
-
-      return PlateCropResult(path: cropPath, box: best, score: best.score);
+      image = (await codec.getNextFrame()).image;
+      final detections = await _detectImage(interpreter, image, roi: roi);
+      return detections
+          .where((detection) => detection.score >= minScore)
+          .toList();
     } catch (_) {
-      return null;
+      return const [];
     } finally {
       image?.dispose();
       codec?.dispose();
     }
   }
 
-  Future<List<PlateDetection>> _detectImage(
-    Interpreter interpreter,
-    ui.Image image,
-  ) async {
-    final transform = letterboxTransform(image.width, image.height);
-    final inputImage = await _letterboxImage(image, transform);
+  /// Deteksi plat pada file gambar dan hasilkan crop PNG yang sudah
+  /// diperbesar. Mengembalikan null bila model tidak tersedia atau tidak ada
+  /// plat yang cukup yakin.
+  Future<PlateCropResult?> detectAndCrop(
+    String imagePath, {
+    ui.Rect? roi,
+  }) async {
+    final results = await detectAndCropAll(imagePath, maxCrops: 1, roi: roi);
+    return results.isEmpty ? null : results.first;
+  }
+
+  /// Decode file gambar menjadi [ui.Image] sekali saja untuk dipakai ulang di
+  /// beberapa langkah dalam satu frame. Pemanggil wajib memanggil `dispose()`.
+  Future<ui.Image?> decodeFile(String imagePath) async {
+    ui.Codec? codec;
     try {
-      final byteData = await inputImage.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
-      if (byteData == null) return const [];
-
-      final rgba = byteData.buffer.asUint8List(
-        byteData.offsetInBytes,
-        byteData.lengthInBytes,
-      );
-      const pixelCount = inputSize * inputSize;
-      // Model TFLite hasil konversi memakai layout NHWC (piksel berurutan RGB).
-      final input = Float32List(3 * pixelCount);
-      for (var i = 0; i < pixelCount; i++) {
-        input[i * 3] = rgba[i * 4] / 255.0;
-        input[i * 3 + 1] = rgba[i * 4 + 1] / 255.0;
-        input[i * 3 + 2] = rgba[i * 4 + 2] / 255.0;
-      }
-
-      final output = Float32List(valuesPerAnchor * numAnchors)
-          .reshape<double>([1, valuesPerAnchor, numAnchors]);
-      interpreter.run(
-        input.reshape<double>([1, inputSize, inputSize, 3]),
-        output,
-      );
-
-      final channels = (output[0] as List).cast<List<double>>();
-      final decoded = decodeOutput(channels);
-      final kept = nonMaxSuppression(decoded);
-      return kept
-          .map(
-            (detection) =>
-                mapToImage(detection, transform, image.width, image.height),
-          )
-          .toList();
+      final bytes = await File(imagePath).readAsBytes();
+      codec = await ui.instantiateImageCodec(bytes);
+      return (await codec.getNextFrame()).image;
+    } catch (_) {
+      return null;
     } finally {
-      inputImage.dispose();
+      codec?.dispose();
     }
   }
 
-  Future<ui.Image> _letterboxImage(
-    ui.Image image,
-    LetterboxTransform transform,
+  /// Deteksi sampai [maxCrops] area plat terbaik pada [image] yang sudah
+  /// di-decode, lalu potong & perbesar masing-masing untuk OCR.
+  Future<List<PlateCropResult>> detectAndCropImage(
+    ui.Image image, {
+    double minScore = 0.35,
+    int maxCrops = 1,
+    ui.Rect? roi,
+  }) async {
+    await ensureLoaded();
+    final interpreter = _interpreter;
+    if (interpreter == null) return const [];
+
+    try {
+      final detections = await _detectImage(interpreter, image, roi: roi);
+      final results = <PlateCropResult>[];
+      for (final detection in detections) {
+        if (results.length >= maxCrops) break;
+        // Deteksi sudah terurut skor menurun; sisanya pasti di bawah ambang.
+        if (detection.score < minScore) break;
+        // Kotak yang terlalu kecil tidak mungkin memuat 5+ karakter plat.
+        if (detection.width < 24 || detection.height < 10) continue;
+        final crop = await _cropToPngWithInfo(image, detection);
+        if (crop == null) continue;
+        results.add(
+          PlateCropResult(
+            path: crop.path,
+            box: detection,
+            score: detection.score,
+            previewBytes: crop.bytes,
+            width: crop.width,
+            height: crop.height,
+          ),
+        );
+      }
+      return results;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Deteksi sampai [maxCrops] area plat terbaik (skor tertinggi lebih dulu)
+  /// lalu potong & perbesar masing-masing untuk OCR.
+  ///
+  /// Beberapa kandidat dipakai karena OCR kadang gagal pada satu crop (plat
+  /// miring, terpotong, atau bayangan) tetapi berhasil pada kandidat lain.
+  Future<List<PlateCropResult>> detectAndCropAll(
+    String imagePath, {
+    double minScore = 0.35,
+    int maxCrops = 1,
+    ui.Rect? roi,
+  }) async {
+    final image = await decodeFile(imagePath);
+    if (image == null) return const [];
+    try {
+      return await detectAndCropImage(
+        image,
+        minScore: minScore,
+        maxCrops: maxCrops,
+        roi: roi,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
+
+  /// Deteksi pada satu area panduan, lalu kembalikan kotak dalam koordinat
+  /// gambar asli dan buang kotak yang bertumpuk.
+  Future<List<PlateDetection>> _detectImage(
+    Interpreter interpreter,
+    ui.Image image, {
+    ui.Rect? roi,
+  }) async {
+    final passes = DetectionPass.plan(image.width, image.height, roi: roi);
+    if (passes.isEmpty) return const [];
+
+    // Ambang rendah di sini: pemanggil yang menentukan ambang akhir, supaya
+    // kotak berskor sedang masih bisa dipakai sebagai kandidat crop OCR.
+    const internalThreshold = 0.15;
+    var best = 0.0;
+    var rawCount = 0;
+    final collected = <PlateDetection>[];
+
+    for (final pass in passes) {
+      final inputImage = await renderPass(image, pass);
+      try {
+        final decoded = await _runInference(interpreter, inputImage);
+        rawCount += decoded.length;
+        for (final detection in decoded) {
+          if (detection.score > best) best = detection.score;
+          if (detection.score < internalThreshold) continue;
+          collected.add(pass.toImage(detection));
+        }
+      } finally {
+        inputImage.dispose();
+      }
+    }
+
+    lastBestScore = best;
+    lastRawCount = rawCount;
+
+    final kept = nonMaxSuppression(collected)
+      ..sort((a, b) => b.score.compareTo(a.score));
+    return kept;
+  }
+
+  Future<List<PlateDetection>> _runInference(
+    Interpreter interpreter,
+    ui.Image inputImage,
   ) async {
+    final byteData = await inputImage.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    );
+    if (byteData == null) return const [];
+
+    final rgba = byteData.buffer.asUint8List(
+      byteData.offsetInBytes,
+      byteData.lengthInBytes,
+    );
+    const pixelCount = inputSize * inputSize;
+    // Model TFLite hasil konversi memakai layout NHWC (piksel berurutan RGB).
+    final input = Float32List(3 * pixelCount);
+    for (var i = 0; i < pixelCount; i++) {
+      final src = i * 4;
+      final dst = i * 3;
+      input[dst] = rgba[src] / 255.0;
+      input[dst + 1] = rgba[src + 1] / 255.0;
+      input[dst + 2] = rgba[src + 2] / 255.0;
+    }
+
+    // Kirim buffer mentah (Uint8List untuk input, ByteBuffer untuk output),
+    // bukan list bersarang: menghindari jutaan alokasi dan pemindaian shape
+    // per frame.
+    final outputBytes = Uint8List(valuesPerAnchor * numAnchors * 4);
+    interpreter.run(input.buffer.asUint8List(), outputBytes.buffer);
+
+    final flat = Float32List.view(
+      outputBytes.buffer,
+      outputBytes.offsetInBytes,
+      outputBytes.length ~/ 4,
+    );
+    return decodeFlatOutput(flat, scoreThreshold: 0.01);
+  }
+
+  /// Decode keluaran datar [5 x 3549] (cx, cy, w, h, skor).
+  @visibleForTesting
+  static List<PlateDetection> decodeFlatOutput(
+    Float32List flat, {
+    double scoreThreshold = defaultScoreThreshold,
+  }) {
+    if (flat.length < valuesPerAnchor * numAnchors) return const [];
+    final channels = <List<double>>[
+      for (var c = 0; c < valuesPerAnchor; c++)
+        Float32List.sublistView(flat, c * numAnchors, (c + 1) * numAnchors),
+    ];
+    return decodeOutput(channels, scoreThreshold: scoreThreshold);
+  }
+
+  /// Render area [pass] dari gambar asli tepat ke 416x416 (stretch, tanpa
+  /// padding) — preprocessing yang cocok dengan model ini.
+  @visibleForTesting
+  Future<ui.Image> renderPass(ui.Image image, DetectionPass pass) async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
-    canvas.drawColor(const ui.Color(0xFF727272), ui.BlendMode.src);
     canvas.drawImageRect(
       image,
-      ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      ui.Rect.fromLTWH(
-        transform.padX,
-        transform.padY,
-        image.width * transform.scale,
-        image.height * transform.scale,
-      ),
+      ui.Rect.fromLTWH(pass.left, pass.top, pass.width, pass.height),
+      ui.Rect.fromLTWH(0, 0, inputSize.toDouble(), inputSize.toDouble()),
       ui.Paint()..filterQuality = ui.FilterQuality.high,
     );
     final picture = recorder.endRecording();
@@ -230,49 +454,203 @@ class PlateDetector {
     double widthRatio = 0.9,
     double heightRatio = 0.6,
   }) async {
+    final halfW = widthRatio.clamp(0.1, 1.0) / 2;
+    final halfH = heightRatio.clamp(0.1, 1.0) / 2;
+    return cropRegion(
+      imagePath,
+      left: 0.5 - halfW,
+      top: 0.5 - halfH,
+      right: 0.5 + halfW,
+      bottom: 0.5 + halfH,
+    );
+  }
+
+  /// Potong sebagian [image] yang sudah di-decode berdasarkan koordinat
+  /// ternormalisasi 0..1, lalu perbesar hasilnya.
+  Future<String?> cropRegionFromImage(
+    ui.Image image, {
+    required double left,
+    required double top,
+    required double right,
+    required double bottom,
+  }) async {
+    try {
+      final width = image.width.toDouble();
+      final height = image.height.toDouble();
+      final x1 = (left.clamp(0.0, 1.0) * width);
+      final y1 = (top.clamp(0.0, 1.0) * height);
+      final x2 = (right.clamp(0.0, 1.0) * width);
+      final y2 = (bottom.clamp(0.0, 1.0) * height);
+      final source = ui.Rect.fromLTRB(
+        math.min(x1, x2),
+        math.min(y1, y2),
+        math.max(x1, x2),
+        math.max(y1, y2),
+      );
+      return await _cropImageToPng(image, source);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Potong sebagian frame berdasarkan koordinat ternormalisasi 0..1, lalu
+  /// perbesar hasilnya. Dipakai untuk menyapu beberapa area (tengah, bawah,
+  /// atas) agar plat yang tidak tepat di tengah tetap terbaca OCR.
+  Future<String?> cropRegion(
+    String imagePath, {
+    required double left,
+    required double top,
+    required double right,
+    required double bottom,
+  }) async {
+    final image = await decodeFile(imagePath);
+    if (image == null) return null;
+    try {
+      return await cropRegionFromImage(
+        image,
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
+
+  /// Potong beberapa area (koordinat ternormalisasi 0..1) dari satu frame,
+  /// hanya sekali decode JPEG. Dipakai saat menyapu OCR beberapa area per
+  /// frame; decode ulang untuk tiap area terlalu mahal.
+  Future<List<String?>> cropRegions(
+    String imagePath,
+    List<(double, double, double, double)> regions,
+  ) async {
+    if (regions.isEmpty) return const [];
     ui.Image? image;
     ui.Codec? codec;
     try {
       final bytes = await File(imagePath).readAsBytes();
       codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      image = frame.image;
-
+      image = (await codec.getNextFrame()).image;
       final width = image.width.toDouble();
       final height = image.height.toDouble();
-      final source = ui.Rect.fromCenter(
-        center: ui.Offset(width / 2, height / 2),
-        width: width * widthRatio.clamp(0.1, 1.0),
-        height: height * heightRatio.clamp(0.1, 1.0),
-      );
-      return await _cropImageToPng(image, source);
+
+      final paths = <String?>[];
+      for (final region in regions) {
+        final x1 = region.$1.clamp(0.0, 1.0) * width;
+        final y1 = region.$2.clamp(0.0, 1.0) * height;
+        final x2 = region.$3.clamp(0.0, 1.0) * width;
+        final y2 = region.$4.clamp(0.0, 1.0) * height;
+        paths.add(
+          await _cropImageToPng(
+            image,
+            ui.Rect.fromLTRB(
+              math.min(x1, x2),
+              math.min(y1, y2),
+              math.max(x1, x2),
+              math.max(y1, y2),
+            ),
+          ),
+        );
+      }
+      return paths;
     } catch (_) {
-      return null;
+      return List<String?>.filled(regions.length, null);
     } finally {
       image?.dispose();
       codec?.dispose();
     }
   }
 
-  Future<String?> _cropToPng(ui.Image image, PlateDetection box) async {
-    final marginX = box.width * 0.10;
-    final marginY = box.height * 0.18;
+  Future<({String path, Uint8List bytes, int width, int height})?>
+  _cropToPngWithInfo(ui.Image image, PlateDetection box) async {
+    final marginX = box.width * 0.12;
+    final marginY = box.height * 0.22;
     final left = (box.left - marginX).clamp(0.0, image.width.toDouble());
     final top = (box.top - marginY).clamp(0.0, image.height.toDouble());
     final right = (box.right + marginX).clamp(0.0, image.width.toDouble());
     final bottom = (box.bottom + marginY).clamp(0.0, image.height.toDouble());
-    return _cropImageToPng(image, ui.Rect.fromLTRB(left, top, right, bottom));
+    return _cropImageToPngWithInfo(
+      image,
+      ui.Rect.fromLTRB(left, top, right, bottom),
+    );
+  }
+
+  /// Buat salinan PNG dari [imagePath] dengan warna dibalik dan kontras
+  /// ditingkatkan. Dipakai OCR cadangan untuk plat hitam berhuruf putih
+  /// (plat truk): ML Kit jauh lebih andal membaca teks hitam di latar putih.
+  Future<String?> invertToPng(String imagePath) async {
+    ui.Image? image;
+    ui.Codec? codec;
+    ui.Image? inverted;
+    try {
+      final bytes = await File(imagePath).readAsBytes();
+      codec = await ui.instantiateImageCodec(bytes);
+      image = (await codec.getNextFrame()).image;
+
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      // Isi latar putih solid dulu agar tidak ada saluran alfa transparan.
+      canvas.drawColor(const ui.Color(0xFFFFFFFF), ui.BlendMode.src);
+      // Grayscale + inversi + peningkatan kontras (~1.6x) untuk huruf putih
+      // di atas plat hitam/abu-abu gelap.
+      const c = -1.6;
+      const t = 255.0 * 1.3;
+      const rW = 0.299 * c;
+      const gW = 0.587 * c;
+      const bW = 0.114 * c;
+      canvas.drawImageRect(
+        image,
+        ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        ui.Paint()
+          ..filterQuality = ui.FilterQuality.high
+          ..colorFilter = const ui.ColorFilter.matrix(<double>[
+            rW, gW, bW, 0, t, //
+            rW, gW, bW, 0, t, //
+            rW, gW, bW, 0, t, //
+            0, 0, 0, 1, 0, //
+          ]),
+      );
+      final picture = recorder.endRecording();
+      try {
+        inverted = await picture.toImage(image.width, image.height);
+      } finally {
+        picture.dispose();
+      }
+      final png = await _encodePng(inverted);
+      if (png == null) return null;
+      return await _savePngBytes(png);
+    } catch (_) {
+      return null;
+    } finally {
+      inverted?.dispose();
+      image?.dispose();
+      codec?.dispose();
+    }
   }
 
   Future<String?> _cropImageToPng(ui.Image image, ui.Rect source) async {
+    final result = await _cropImageToPngWithInfo(image, source);
+    return result?.path;
+  }
+
+  Future<({String path, Uint8List bytes, int width, int height})?>
+  _cropImageToPngWithInfo(ui.Image image, ui.Rect source) async {
     if (source.width < 8 || source.height < 4) return null;
 
     // Perbesar crop: plat kecil (jauh) butuh glyph yang lebih besar untuk OCR.
-    final targetWidth = math.min(1280.0, math.max(640.0, source.width * 2.4));
+    // Semua crop (termasuk tile selebar frame) ikut diperbesar minimal 2,2x
+    // agar teks plat cukup besar saat masuk ML Kit.
+    final targetWidth = math.min(1600.0, math.max(720.0, source.width * 2.2));
     final targetHeight = targetWidth * source.height / source.width;
+    final outW = targetWidth.round();
+    final outH = targetHeight.round();
 
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
+    // Pastikan kanvas opaque agar PNG tidak membawa alpha channel kosong.
+    canvas.drawColor(const ui.Color(0xFFFFFFFF), ui.BlendMode.src);
     canvas.drawImageRect(
       image,
       source,
@@ -284,23 +662,11 @@ class PlateDetector {
     final picture = recorder.endRecording();
     ui.Image? cropped;
     try {
-      cropped = await picture.toImage(
-        targetWidth.round(),
-        targetHeight.round(),
-      );
-      final data = await cropped.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) return null;
-
-      final directory = await getTemporaryDirectory();
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}'
-        'anpr_plate_${DateTime.now().microsecondsSinceEpoch}.png',
-      );
-      await file.writeAsBytes(
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true,
-      );
-      return file.path;
+      cropped = await picture.toImage(outW, outH);
+      final bytes = await _encodePng(cropped);
+      if (bytes == null) return null;
+      final path = await _savePngBytes(bytes);
+      return (path: path, bytes: bytes, width: outW, height: outH);
     } catch (_) {
       return null;
     } finally {
@@ -309,17 +675,21 @@ class PlateDetector {
     }
   }
 
-  /// Letterbox: jaga rasio aspek, sisipkan padding abu-abu di tengah.
-  static LetterboxTransform letterboxTransform(
-    int imageWidth,
-    int imageHeight,
-  ) {
-    final scale = math.min(inputSize / imageWidth, inputSize / imageHeight);
-    return LetterboxTransform(
-      scale: scale,
-      padX: (inputSize - imageWidth * scale) / 2,
-      padY: (inputSize - imageHeight * scale) / 2,
+  Future<Uint8List?> _encodePng(ui.Image image) async {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) return null;
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  }
+
+  /// Simpan byte PNG ke file sementara dan kembalikan path-nya.
+  Future<String> _savePngBytes(Uint8List bytes) async {
+    final directory = await getTemporaryDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}'
+      'anpr_plate_${DateTime.now().microsecondsSinceEpoch}.png',
     );
+    await file.writeAsBytes(bytes);
+    return file.path;
   }
 
   /// Decode keluaran YOLOv8 ([5][3549] = cx, cy, w, h, skor).
@@ -400,35 +770,5 @@ class PlateDetector {
       if (!overlaps) kept.add(candidate);
     }
     return kept;
-  }
-
-  /// Kembalikan kotak dari koordinat input model ke koordinat gambar asli.
-  static PlateDetection mapToImage(
-    PlateDetection detection,
-    LetterboxTransform transform,
-    int imageWidth,
-    int imageHeight,
-  ) {
-    final maxX = imageWidth.toDouble();
-    final maxY = imageHeight.toDouble();
-    return PlateDetection(
-      left: ((detection.left - transform.padX) / transform.scale).clamp(
-        0.0,
-        maxX,
-      ),
-      top: ((detection.top - transform.padY) / transform.scale).clamp(
-        0.0,
-        maxY,
-      ),
-      right: ((detection.right - transform.padX) / transform.scale).clamp(
-        0.0,
-        maxX,
-      ),
-      bottom: ((detection.bottom - transform.padY) / transform.scale).clamp(
-        0.0,
-        maxY,
-      ),
-      score: detection.score,
-    );
   }
 }

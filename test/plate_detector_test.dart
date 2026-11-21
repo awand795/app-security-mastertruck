@@ -1,29 +1,49 @@
+import 'dart:typed_data';
+import 'dart:ui';
+
 import 'package:bengkel_kim3_security_app/services/plate_detector.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 List<double> _zeros() => List<double>.filled(PlateDetector.numAnchors, 0);
 
 void main() {
-  group('letterboxTransform', () {
-    test('gambar persegi tidak diberi padding', () {
-      final transform = PlateDetector.letterboxTransform(832, 832);
-      expect(transform.scale, 0.5);
-      expect(transform.padX, 0);
-      expect(transform.padY, 0);
+  group('DetectionPass.plan', () {
+    test('tanpa area panduan memakai frame penuh sebagai satu pass', () {
+      final passes = DetectionPass.plan(1280, 720);
+      expect(passes, hasLength(1));
+      expect(passes.first.left, 0);
+      expect(passes.first.top, 0);
+      expect(passes.first.width, 1280);
+      expect(passes.first.height, 720);
     });
 
-    test('gambar landscape diberi padding vertikal', () {
-      final transform = PlateDetector.letterboxTransform(416, 208);
-      expect(transform.scale, 1.0);
-      expect(transform.padX, 0);
-      expect(transform.padY, 104);
+    test('area panduan dipotong sesuai koordinat ternormalisasi', () {
+      final passes = DetectionPass.plan(
+        1280,
+        720,
+        roi: const Rect.fromLTRB(0.02, 0.32, 0.98, 0.68),
+      );
+      expect(passes, hasLength(1));
+      final roi = passes.first;
+      expect(roi.left, closeTo(1280 * 0.02, 1e-9));
+      expect(roi.top, closeTo(720 * 0.32, 1e-9));
+      expect(roi.width, closeTo(1280 * 0.96, 1e-9));
+      expect(roi.height, closeTo(720 * 0.36, 1e-9));
     });
 
-    test('gambar portrait diberi padding horizontal', () {
-      final transform = PlateDetector.letterboxTransform(208, 416);
-      expect(transform.scale, 1.0);
-      expect(transform.padX, 104);
-      expect(transform.padY, 0);
+    test('area panduan terlalu kecil diabaikan', () {
+      final passes = DetectionPass.plan(
+        1280,
+        720,
+        roi: const Rect.fromLTRB(0.5, 0.5, 0.5001, 0.5001),
+      );
+      expect(passes, hasLength(1));
+      expect(passes.first.width, 1280);
+      expect(passes.first.height, 720);
+    });
+
+    test('ukuran tidak valid menghasilkan pass kosong', () {
+      expect(DetectionPass.plan(0, 0), isEmpty);
     });
   });
 
@@ -77,6 +97,28 @@ void main() {
     test('output dengan channel kurang dari 5 diabaikan', () {
       expect(PlateDetector.decodeOutput([_zeros(), _zeros()]), isEmpty);
     });
+
+    test('decodeFlatOutput membaca keluaran datar 5 x 3549', () {
+      final flat = Float32List(
+        PlateDetector.valuesPerAnchor * PlateDetector.numAnchors,
+      );
+      // anchor ke-7: cx=100, cy=120, w=60, h=20, skor=0.9
+      flat[7] = 100;
+      flat[PlateDetector.numAnchors + 7] = 120;
+      flat[2 * PlateDetector.numAnchors + 7] = 60;
+      flat[3 * PlateDetector.numAnchors + 7] = 20;
+      flat[4 * PlateDetector.numAnchors + 7] = 0.9;
+
+      final detections = PlateDetector.decodeFlatOutput(flat);
+      expect(detections, hasLength(1));
+      expect(detections.first.score, closeTo(0.9, 1e-6));
+      expect(detections.first.left, closeTo(70, 1e-6));
+      expect(detections.first.top, closeTo(110, 1e-6));
+    });
+
+    test('decodeFlatOutput mengabaikan buffer terlalu pendek', () {
+      expect(PlateDetector.decodeFlatOutput(Float32List(10)), isEmpty);
+    });
   });
 
   group('nonMaxSuppression', () {
@@ -122,27 +164,33 @@ void main() {
     });
   });
 
-  group('mapToImage', () {
-    const detection = PlateDetection(
-      left: 100,
-      top: 100,
-      right: 200,
-      bottom: 140,
-      score: 0.9,
-    );
+  group('DetectionPass.toImage', () {
+    const fullFrame = DetectionPass(left: 0, top: 0, width: 832, height: 832);
 
     test('mengembalikan koordinat ke ukuran gambar asli', () {
-      final transform = PlateDetector.letterboxTransform(832, 832);
-      final mapped = PlateDetector.mapToImage(detection, transform, 832, 832);
+      final mapped = fullFrame.toImage(
+        const PlateDetection(
+          left: 100,
+          top: 100,
+          right: 200,
+          bottom: 140,
+          score: 0.9,
+        ),
+      );
       expect(mapped.left, 200);
       expect(mapped.top, 200);
       expect(mapped.right, 400);
       expect(mapped.bottom, 280);
     });
 
-    test('membuang padding atas sebelum diskalakan', () {
-      final transform = PlateDetector.letterboxTransform(416, 208);
-      final mapped = PlateDetector.mapToImage(
+    test('menambahkan offset dan skala area crop tengah', () {
+      const center = DetectionPass(
+        left: 200,
+        top: 100,
+        width: 416,
+        height: 208,
+      );
+      final mapped = center.toImage(
         const PlateDetection(
           left: 10,
           top: 110,
@@ -150,19 +198,15 @@ void main() {
           bottom: 130,
           score: 0.8,
         ),
-        transform,
-        416,
-        208,
       );
-      expect(mapped.left, 10);
-      expect(mapped.top, 6);
-      expect(mapped.right, 50);
-      expect(mapped.bottom, 26);
+      expect(mapped.left, 210);
+      expect(mapped.top, 155);
+      expect(mapped.right, 250);
+      expect(mapped.bottom, 165);
     });
 
-    test('tidak menghasilkan koordinat di luar gambar', () {
-      final transform = PlateDetector.letterboxTransform(832, 832);
-      final mapped = PlateDetector.mapToImage(
+    test('tidak menghasilkan koordinat di luar area pass', () {
+      final mapped = fullFrame.toImage(
         const PlateDetection(
           left: -50,
           top: -50,
@@ -170,9 +214,6 @@ void main() {
           bottom: 500,
           score: 0.9,
         ),
-        transform,
-        832,
-        832,
       );
       expect(mapped.left, greaterThanOrEqualTo(0));
       expect(mapped.top, greaterThanOrEqualTo(0));

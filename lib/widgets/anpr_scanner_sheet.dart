@@ -50,10 +50,30 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
   Timer? _scanTimer;
   Timer? _autoConfirmTimer;
   Timer? _focusIndicatorTimer;
+  Timer? _initialFocusTimer;
+  int _frameCount = 0;
+
+  /// Berapa kali OCR mengembalikan teks (walau belum berbentuk plat). Bila
+  /// angkanya tetap 0 sementara frame terus bertambah, gambar dari kamera yang
+  /// tidak terbaca — bukan pencocokan polanya.
+  int _ocrTextHits = 0;
+  DateTime? _processingSince;
+  Uint8List? _lastCropPreview;
+  String? _lastCropSize;
+  String? _lastOcrError;
+  String _stageLabel = 'Menyiapkan kamera…';
   Offset? _focusIndicator;
   double _zoom = 1.0;
   double _maxZoom = 1.0;
   final List<({String plate, DateTime time})> _recentCandidates = [];
+
+  /// Tampilkan thumbnail kecil hasil crop YOLO di layar untuk diagnosa.
+  /// Ubah ke `false` bila sudah tidak diperlukan.
+  static const bool _showCropDebugPreview = true;
+
+  /// Skor minimum deteksi YOLO agar 1x bacaan OCR valid langsung dikunci
+  /// dan otomatis kembali ke halaman pemanggil.
+  static const double _directConfirmYoloScore = 0.60;
 
   /// Bacaan lebih lama dari ini dibuang agar tidak menahan konsensus.
   static const Duration _consensusWindow = Duration(seconds: 12);
@@ -61,17 +81,38 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
   /// Batas zoom digital yang masih wajar untuk OCR.
   static const double _maxUserZoom = 4.0;
 
-  /// Jeda kecil antar frame pemindaian otomatis. Frame berikutnya dijadwalkan
-  /// segera setelah frame sebelumnya selesai diproses agar pembacaan cepat,
-  /// tanpa membuat pratinjau kamera tersendat.
-  static const Duration _frameInterval = Duration(milliseconds: 120);
+  /// Jeda antar frame pemindaian otomatis. Frame berikutnya dijadwalkan
+  /// segera setelah frame sebelumnya selesai diproses. Jeda ini tidak terlalu
+  /// rapat supaya autofokus & eksposur kamera punya waktu menstabilkan gambar
+  /// (frame yang blur membuat deteksi & OCR selalu gagal) sekaligus memberi
+  /// waktu proses OCR menyelesaikan frame sebelumnya.
+  static const Duration _frameInterval = Duration(milliseconds: 150);
 
   /// Jeda singkat sebelum plat hasil konsensus dipakai otomatis, agar
   /// petugas sempat melihat bacaan dan membatalkannya bila keliru.
-  static const Duration _autoConfirmDelay = Duration(milliseconds: 1000);
+  static const Duration _autoConfirmDelay = Duration(milliseconds: 550);
+
+  /// Setiap berapa frame autofokus diarahkan ke tengah bila belum ada bacaan.
+  static const int _focusEveryFrames = 10;
+
+  /// Area panduan plat (koordinat ternormalisasi pada foto yang diambil).
+  ///
+  /// Petugas mengarahkan plat ke kotak panduan di layar; hanya area ini yang
+  /// dideteksi & di-OCR. Area sempit membuat plat menempati porsi jauh lebih
+  /// besar pada input model 416x416 sehingga deteksi & OCR jauh lebih andal
+  /// dibanding memindai seluruh frame.
+  static const Rect _scanRoi = Rect.fromLTRB(0.02, 0.32, 0.98, 0.68);
+
+  /// Kotak panduan di layar. Selalu berada di dalam [_scanRoi] agar plat yang
+  /// terlihat di dalam kotak pasti ikut terpotong saat pemindaian.
+  static const double _guideWidthFactor = 0.90;
+  static const double _guideHeightFactor = 0.28;
+
+  /// Batas panggilan OCR per frame supaya pemindaian tetap responsif.
+  static const int _maxOcrPerFrame = 4;
 
   static const String _idleHint =
-      'Arahkan ke plat nomor. Ketuk layar untuk fokus, plat terbaca otomatis.';
+      'Posisikan plat di dalam kotak. Ketuk layar untuk fokus, plat terbaca otomatis.';
 
   @override
   void initState() {
@@ -86,11 +127,15 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
   }
 
   Future<CameraController?> _createController(CameraDescription camera) async {
-    // Resolusi 720p cukup untuk plat di gerbang dan jauh lebih cepat dijepret
-    // daripada veryHigh (foto besar membuat OCR lambat & pratinjau tersendat).
+    // Utamakan resolusi 1080p: plat di gerbang sering hanya menempati sebagian
+    // kecil frame, dan teks plat perlu cukup piksel agar ML Kit bisa membacanya.
     // Bila perangkat tidak mendukung, turun bertahap sampai kamera menyala.
+    // `high` (720p) didahulukan karena cukup tajam untuk OCR tetapi jauh
+    // lebih cepat diambil berulang dibanding foto 1080p/4K; pengambilan foto
+    // resolusi penuh tiap 200 ms membuat kamera lambat atau gagal di HP murah.
     const presets = [
       ResolutionPreset.high,
+      ResolutionPreset.veryHigh,
       ResolutionPreset.medium,
       ResolutionPreset.low,
     ];
@@ -162,6 +207,12 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
       });
 
       _startScanning();
+      // Autofokus awal ke tengah frame setelah kamera benar-benar siap.
+      _initialFocusTimer?.cancel();
+      _initialFocusTimer = Timer(
+        const Duration(milliseconds: 600),
+        () => unawaited(_focusCenter(announce: false)),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -174,8 +225,14 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
 
   void _startScanning() {
     _scanning = true;
+    _setStage('Memindai plat…');
     _scanTimer?.cancel();
-    _scanTimer = Timer(const Duration(milliseconds: 120), _captureAndDetect);
+    _scanTimer = Timer(const Duration(milliseconds: 80), _captureAndDetect);
+  }
+
+  void _setStage(String label) {
+    if (!mounted || _stageLabel == label) return;
+    setState(() => _stageLabel = label);
   }
 
   void _scheduleNextScan() {
@@ -187,6 +244,11 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
   void _restartScan() {
     _autoConfirmTimer?.cancel();
     _recentCandidates.clear();
+    _frameCount = 0;
+    _ocrTextHits = 0;
+    _lastCropPreview = null;
+    _lastCropSize = null;
+    _lastOcrError = null;
     setState(() {
       _detectedPlate = null;
       _confidence = 0;
@@ -213,7 +275,23 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
   /// selama pemindaian aktif.
   Future<void> _captureAndDetect() async {
     final controller = _controller;
-    if (!_scanning || _detectedPlate != null) return;
+    if (!_scanning) return;
+    // Pengaman: bila satu frame menggantung (mis. takePicture tidak pernah
+    // selesai), jangan biarkan pemindaian diam selamanya.
+    if (_isProcessing) {
+      final since = _processingSince;
+      if (since != null &&
+          DateTime.now().difference(since) > const Duration(seconds: 8)) {
+        _isProcessing = false;
+        _processingSince = null;
+        if (mounted) {
+          setState(() {
+            _statusIsError = true;
+            _statusText = 'Kamera tidak merespons, pemindaian dimulai ulang…';
+          });
+        }
+      }
+    }
     if (!_isCameraReady ||
         _isProcessing ||
         controller == null ||
@@ -224,12 +302,21 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
     }
 
     _isProcessing = true;
+    _processingSince = DateTime.now();
+    _frameCount++;
+    _setStage('Mengambil frame…');
+
+    // Arahkan autofokus ke tengah secara berkala selama plat belum terkunci,
+    // supaya frame tidak terus-menerus blur karena fokus berburu.
+    if (_detectedPlate == null && _frameCount % _focusEveryFrames == 0) {
+      unawaited(_focusCenter(announce: false));
+    }
 
     try {
       final image = await controller.takePicture();
-      AnprResult result;
+      ({AnprResult result, double bestYoloScore}) read;
       try {
-        result = await _readPlate(image.path);
+        read = await _readPlate(image.path, _scanRoi);
       } finally {
         // Semua file sementara (crop & foto asli) dibersihkan di sini.
         try {
@@ -240,7 +327,24 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
 
       if (!mounted || !_scanning) return;
 
+      final result = read.result;
       if (result.success && result.plate != null && result.plate!.isNotEmpty) {
+        if (read.bestYoloScore >= _directConfirmYoloScore) {
+          _scanning = false;
+          _scanTimer?.cancel();
+          unawaited(_fireDetectionHaptic());
+          setState(() {
+            _detectedPlate = result.plate;
+            _confidence = result.confidence;
+            _stageLabel = 'Plat terkunci';
+            _statusIsError = false;
+            _statusText = 'Plat terdeteksi. Melanjutkan otomatis…';
+          });
+          _autoConfirmTimer?.cancel();
+          _autoConfirmTimer = Timer(_autoConfirmDelay, _useDetectedPlate);
+          return;
+        }
+
         final now = DateTime.now();
         _recentCandidates.removeWhere(
           (candidate) => now.difference(candidate.time) > _consensusWindow,
@@ -258,6 +362,7 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
           setState(() {
             _detectedPlate = consensus.plate;
             _confidence = consensus.confidence;
+            _stageLabel = 'Plat terkunci';
             _statusIsError = false;
             _statusText = consensus.exactMatch
                 ? 'Plat sama terbaca ${consensus.votes}x. Melanjutkan otomatis…'
@@ -269,32 +374,71 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
           return;
         }
 
+        // Baru satu bacaan dengan skor deteksi rendah: tampilkan plat dan
+        // tunggu konsensus 2x bacaan.
         setState(() {
+          _detectedPlate = result.plate;
+          _confidence = result.confidence;
+          _stageLabel = 'Mengonfirmasi bacaan…';
           _statusIsError = false;
           _statusText =
-              'Membaca: ${result.plate} · tahan kamera stabil '
-              '(${_recentCandidates.length}/2)';
+              'Membaca: ${result.plate} · tahan kamera sampai terbaca 2x, '
+              'atau tekan "Gunakan Plat Ini".';
         });
       } else {
+        _setStage('Memindai plat…');
         // Tampilkan apa yang sebenarnya dibaca OCR supaya petugas tahu apakah
         // kamera terlalu jauh/blur atau teksnya memang tidak menyerupai plat.
         final raw = _ocrSnippet(result.rawText ?? '');
+        final issues = <String>[];
+        if (PlateDetector.instance.isUnavailable) {
+          issues.add('model deteksi gagal dimuat');
+        }
+        if (result.error != null) issues.add('OCR error');
+        final suffix = issues.isEmpty ? '' : ' (${issues.join(', ')})';
         setState(() {
           _statusIsError = false;
           _statusText = raw.isEmpty
-              ? 'Belum ada teks terbaca · dekatkan kamera, ketuk layar untuk '
-                    'fokus, atau tambah zoom.'
-              : 'Teks terbaca: "$raw" · belum cocok dengan pola plat.';
+              ? 'Belum ada teks terbaca$suffix · dekatkan kamera, ketuk layar '
+                    'untuk fokus, atau tambah zoom.'
+              : 'Teks terbaca: "$raw"$suffix · belum cocok dengan pola plat.';
         });
       }
-    } catch (_) {
-      // Frame gagal diproses diabaikan agar pemindaian tetap berjalan.
+    } catch (e) {
+      // Frame gagal diambil/diproses: tampilkan penyebabnya, jangan diam saja,
+      // agar kamera yang macet (mis. takePicture ditolak perangkat) terlihat.
+      if (mounted && _scanning) {
+        setState(() {
+          _statusIsError = true;
+          _statusText = 'Gagal memproses frame: ${_ocrSnippet(e.toString())}';
+        });
+      }
     } finally {
       _isProcessing = false;
-      if (_scanning && _detectedPlate == null) {
+      _processingSince = null;
+      if (_scanning) {
         _scheduleNextScan();
       }
     }
+  }
+
+  /// Baris diagnosa kecil di bawah status: memastikan model benar-benar
+  /// termuat, memperlihatkan skor deteksi tertinggi, dan jumlah frame yang
+  /// sudah diproses. Bila frame terus bertambah tetapi skor 0.00 sementara
+  /// plat jelas terlihat, berarti model tidak mengenali gambar (bukan kamera
+  /// macet).
+  String _diagnostics() {
+    final detector = PlateDetector.instance;
+    if (detector.isUnavailable) {
+      final reason = detector.lastLoadError ?? 'tanpa pesan';
+      return 'Model: GAGAL · ${_ocrSnippet(reason)}';
+    }
+    final cropInfo = _lastCropSize == null ? '' : ' · crop $_lastCropSize';
+    final ocrErr = _lastOcrError == null ? '' : ' · err $_lastOcrError';
+    return 'Model: OK · kotak '
+        '${detector.lastRawCount} · skor '
+        '${detector.lastBestScore.toStringAsFixed(2)}$cropInfo · '
+        'OCR $_ocrTextHits · frame $_frameCount$ocrErr';
   }
 
   static String _ocrSnippet(String text) {
@@ -303,32 +447,167 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
     return '${compact.substring(0, 42)}…';
   }
 
-  /// Baca plat dari satu frame dengan tiga tingkat upaya: kotak hasil
-  /// detektor (paling tajam untuk plat kecil/jauh), area tengah frame yang
-  /// diperbesar, lalu frame penuh sebagai upaya terakhir.
-  Future<AnprResult> _readPlate(String imagePath) async {
-    final crop = await PlateDetector.instance.detectAndCrop(imagePath);
-    // Kotak detektor hanya dipakai bila model cukup yakin; bila ragu, crop
-    // yang salah justru membuang satu kesempatan OCR.
-    if (crop != null) {
-      if (crop.score >= 0.5) {
-        final result = await AnprService.detectFromImageFile(crop.path);
-        if (result.success) return result;
-      } else {
-        try {
-          final file = File(crop.path);
-          if (await file.exists()) await file.delete();
-        } catch (_) {}
+  /// Baca plat dari satu frame di dalam area panduan [roi].
+  ///
+  /// Urutan upaya (dibatasi [_maxOcrPerFrame] panggilan agar tetap responsif):
+  /// 1. kotak hasil model detektor pada area panduan (normal & inversi),
+  /// 2. OCR langsung area panduan yang diperbesar,
+  /// 3. foto asli dari kamera sebagai cadangan bila semua crop PNG gagal.
+  Future<({AnprResult result, double bestYoloScore})> _readPlate(
+    String imagePath,
+    Rect roi,
+  ) async {
+    var ocrCalls = 0;
+    var bestYoloScore = 0.0;
+    final seenText = <String>[];
+    String? lastError;
+
+    Future<AnprResult?> tryOcr(String path) async {
+      if (ocrCalls >= _maxOcrPerFrame) return null;
+      ocrCalls++;
+      final result = await AnprService.detectFromImageFile(path);
+      _noteOcrText(result);
+      if (result.error != null) lastError = result.error;
+      final raw = result.rawText?.trim() ?? '';
+      if (raw.isNotEmpty) seenText.add(raw);
+      return result.success ? result : null;
+    }
+
+    Future<AnprResult?> tryInverted(String path) async {
+      if (ocrCalls >= _maxOcrPerFrame) return null;
+      final inverted = await PlateDetector.instance.invertToPng(path);
+      if (inverted == null) return null;
+      try {
+        return await tryOcr(inverted);
+      } finally {
+        await _deleteQuietly(inverted);
       }
     }
 
-    final centerPath = await PlateDetector.instance.cropCenterRegion(imagePath);
-    if (centerPath != null) {
-      final result = await AnprService.detectFromImageFile(centerPath);
-      if (result.success) return result;
+    final decodedImage = await PlateDetector.instance.decodeFile(imagePath);
+    try {
+      // 1) Kotak dari model detektor. Ambang 0.35 karena model ini juga memberi
+      //    skor ~0.3 pada tulisan/logo yang bukan plat.
+      _setStage('Mendeteksi posisi plat…');
+      final crops = decodedImage == null
+          ? const <PlateCropResult>[]
+          : await PlateDetector.instance.detectAndCropImage(
+              decodedImage,
+              minScore: 0.35,
+              maxCrops: 1,
+              roi: roi,
+            );
+      if (crops.isNotEmpty) {
+        final first = crops.first;
+        bestYoloScore = first.score;
+        _lastCropPreview = first.previewBytes;
+        _lastCropSize = '${first.width}x${first.height}';
+        _setStage('Plat terdeteksi, membaca huruf…');
+      } else {
+        _setStage('Memindai area kotak…');
+      }
+      try {
+        for (final crop in crops) {
+          final hit = await tryOcr(crop.path);
+          if (hit != null) {
+            _lastOcrError = null;
+            return (result: hit, bestYoloScore: bestYoloScore);
+          }
+          final invertedHit = await tryInverted(crop.path);
+          if (invertedHit != null) {
+            _lastOcrError = null;
+            return (result: invertedHit, bestYoloScore: bestYoloScore);
+          }
+        }
+      } finally {
+        for (final crop in crops) {
+          await _deleteQuietly(crop.path);
+        }
+      }
+
+      // 2) OCR area panduan (diperbesar), memakai image yang sudah di-decode.
+      final roiPath = decodedImage == null
+          ? null
+          : await PlateDetector.instance.cropRegionFromImage(
+              decodedImage,
+              left: roi.left,
+              top: roi.top,
+              right: roi.right,
+              bottom: roi.bottom,
+            );
+      if (roiPath != null) {
+        try {
+          final hit = await tryOcr(roiPath);
+          if (hit != null) {
+            _lastOcrError = null;
+            return (result: hit, bestYoloScore: bestYoloScore);
+          }
+          if (_ocrTextHits == 0 || _frameCount.isEven) {
+            final invertedHit = await tryInverted(roiPath);
+            if (invertedHit != null) {
+              _lastOcrError = null;
+              return (result: invertedHit, bestYoloScore: bestYoloScore);
+            }
+          }
+        } finally {
+          await _deleteQuietly(roiPath);
+        }
+      }
+    } finally {
+      decodedImage?.dispose();
     }
 
-    return AnprService.detectFromImageFile(imagePath);
+    // 3) Cadangan: JPEG asli dari kamera bila semua PNG tidak menghasilkan teks.
+    if (seenText.isEmpty) {
+      final rawHit = await AnprService.detectFromImageFile(imagePath);
+      _noteOcrText(rawHit);
+      if (rawHit.error != null) lastError = rawHit.error;
+      final raw = rawHit.rawText?.trim() ?? '';
+      if (raw.isNotEmpty) seenText.add(raw);
+      if (rawHit.success) {
+        _lastOcrError = null;
+        return (result: rawHit, bestYoloScore: bestYoloScore);
+      }
+    }
+
+    _lastOcrError = lastError;
+    return (
+      result: AnprResult(
+        success: false,
+        rawText: seenText.isEmpty ? null : seenText.join(' '),
+        error: lastError,
+      ),
+      bestYoloScore: bestYoloScore,
+    );
+  }
+
+  void _noteOcrText(AnprResult result) {
+    final text = result.rawText?.trim() ?? '';
+    if (text.isNotEmpty) _ocrTextHits++;
+  }
+
+  static Future<void> _deleteQuietly(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
+  /// Arahkan autofokus ke tengah frame (tempat plat biasanya dibidik).
+  Future<void> _focusCenter({bool announce = true}) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      await controller.setFocusMode(FocusMode.auto);
+      await controller.setFocusPoint(const Offset(0.5, 0.5));
+      if (!mounted || !announce) return;
+      setState(() {
+        _statusIsError = false;
+        _statusText = 'Fokus ke tengah · arahkan tepat ke plat nomor.';
+      });
+    } catch (_) {
+      // Perangkat yang tidak mendukung titik fokus tetap memakai autofokus.
+    }
   }
 
   /// Fokus ke titik yang diketuk. Layar menampilkan pratinjau penuh
@@ -446,6 +725,7 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
     _scanTimer?.cancel();
     _autoConfirmTimer?.cancel();
     _focusIndicatorTimer?.cancel();
+    _initialFocusTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -549,6 +829,31 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
                       ],
                     ),
                   ),
+                  if (_showCropDebugPreview && _lastCropPreview != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.lg),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          width: 148,
+                          height: 54,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: AppTheme.navyDark.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            border: Border.all(
+                              color: AppTheme.amberGold.withValues(alpha: 0.85),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Image.memory(
+                            _lastCropPreview!,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                          ),
+                        ),
+                      ),
+                    ),
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -578,6 +883,14 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
                             color: _statusIsError
                                 ? AppTheme.errorLight
                                 : AppTheme.surfaceWhite.withValues(alpha: 0.78),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _diagnostics(),
+                          textAlign: TextAlign.center,
+                          style: texts.labelSmall?.copyWith(
+                            color: AppTheme.surfaceWhite.withValues(alpha: 0.5),
                           ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
@@ -738,6 +1051,19 @@ class _AnprScannerSheetState extends State<AnprScannerSheet> {
                     ),
                   ),
                 ),
+                IgnorePointer(
+                  child: Center(
+                    child: FractionallySizedBox(
+                      widthFactor: _guideWidthFactor,
+                      heightFactor: _guideHeightFactor,
+                      child: _ScanGuideBox(
+                        active: _detectedPlate != null,
+                        isScanning: _scanning,
+                        stageLabel: _stageLabel,
+                      ),
+                    ),
+                  ),
+                ),
                 if (_focusIndicator != null)
                   Positioned(
                     left: _focusIndicator!.dx - 30,
@@ -801,6 +1127,191 @@ class _FocusIndicator extends StatelessWidget {
           color: AppTheme.amberGold.withValues(alpha: 0.12),
         ),
       ),
+    );
+  }
+}
+
+class _ScanGuideBox extends StatefulWidget {
+  const _ScanGuideBox({
+    required this.active,
+    required this.isScanning,
+    required this.stageLabel,
+  });
+
+  final bool active;
+  final bool isScanning;
+  final String stageLabel;
+
+  @override
+  State<_ScanGuideBox> createState() => _ScanGuideBoxState();
+}
+
+class _ScanGuideBoxState extends State<_ScanGuideBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _scanAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (widget.isScanning && !widget.active) {
+      _scanAnim.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScanGuideBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final shouldAnimate = widget.isScanning && !widget.active;
+    if (shouldAnimate && !_scanAnim.isAnimating) {
+      _scanAnim.repeat(reverse: true);
+    } else if (!shouldAnimate && _scanAnim.isAnimating) {
+      _scanAnim.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scanAnim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final color = widget.active ? context.semantic.success : AppTheme.amberGold;
+    final side = BorderSide(color: color.withValues(alpha: 0.9), width: 3);
+
+    Widget corner({
+      double? top,
+      double? bottom,
+      double? left,
+      double? right,
+      required Border border,
+    }) {
+      return Positioned(
+        top: top,
+        bottom: bottom,
+        left: left,
+        right: right,
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: DecoratedBox(decoration: BoxDecoration(border: border)),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(color: color.withValues(alpha: 0.22)),
+              color: color.withValues(alpha: 0.04),
+            ),
+          ),
+        ),
+        if (widget.isScanning && !widget.active)
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: AnimatedBuilder(
+                animation: _scanAnim,
+                builder: (context, child) => Align(
+                  alignment: Alignment(0, -0.85 + _scanAnim.value * 1.7),
+                  child: child,
+                ),
+                child: Container(
+                  height: 2.5,
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        color.withValues(alpha: 0.0),
+                        color.withValues(alpha: 0.95),
+                        color.withValues(alpha: 0.0),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.55),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        corner(
+          top: 0,
+          left: 0,
+          border: Border(top: side, left: side),
+        ),
+        corner(
+          top: 0,
+          right: 0,
+          border: Border(top: side, right: side),
+        ),
+        corner(
+          bottom: 0,
+          left: 0,
+          border: Border(bottom: side, left: side),
+        ),
+        corner(
+          bottom: 0,
+          right: 0,
+          border: Border(bottom: side, right: side),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 8,
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppTheme.navyDark.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.isScanning && !widget.active) ...[
+                      SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      widget.active ? 'Plat terkunci' : widget.stageLabel,
+                      style: texts.labelSmall?.copyWith(
+                        color: AppTheme.surfaceWhite,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
