@@ -54,6 +54,7 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
     'Kendaraan di Dalam',
     'Kendaraan Keluar',
     'Riwayat Keluar',
+    'Ganti Gate',
   ];
 
   static const _subtitles = [
@@ -62,6 +63,7 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
     'Pantau armada yang masih di bengkel',
     'Validasi lokasi, FIR (MT), dan terbitkan gate pass',
     'Riwayat gate pass kendaraan keluar',
+    'Pilih gerbang tugas aktif',
   ];
 
   int _currentIndex = 0;
@@ -100,6 +102,11 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
       icon: Icons.receipt_long_outlined,
       selectedIcon: Icons.receipt_long_rounded,
       label: 'Riwayat',
+    ),
+    BottomNavItem(
+      icon: Icons.door_sliding_outlined,
+      selectedIcon: Icons.door_sliding_rounded,
+      label: 'Gate',
     ),
   ];
 
@@ -183,28 +190,11 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
       builder: (sheetContext) => ProfileSheet(
         session: session,
         onLogout: () => Navigator.of(sheetContext).pop('logout'),
-        onSwitchGate: () => Navigator.of(sheetContext).pop('switch_gate'),
       ),
     );
 
-    if (!mounted) return;
-    if (action == 'logout') {
-      await _confirmLogout();
-      return;
-    }
-    if (action == 'switch_gate') {
-      await _openGateSwitch();
-    }
-  }
-
-  Future<void> _openGateSwitch() async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const GateSelectView(switching: true)),
-    );
-    if (!mounted || changed != true) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gate aktif berhasil diperbarui.')),
-    );
+    if (!mounted || action != 'logout') return;
+    await _confirmLogout();
   }
 
   Future<void> _confirmLogout() async {
@@ -342,6 +332,8 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
           memoLoader: widget.memoLoader,
           clock: widget.clock,
         );
+      case 5:
+        return const GateSelectView(switching: true, embedded: true);
       default:
         return const SizedBox.shrink();
     }

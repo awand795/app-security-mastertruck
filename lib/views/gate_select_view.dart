@@ -14,9 +14,14 @@ import 'login_view.dart';
 /// Jika [switching] = true, layar dipakai untuk mengganti gate aktif saat
 /// sudah login; setelah konfirmasi kembali ke layar sebelumnya.
 class GateSelectView extends StatefulWidget {
-  const GateSelectView({super.key, this.switching = false});
+  const GateSelectView({
+    super.key,
+    this.switching = false,
+    this.embedded = false,
+  });
 
   final bool switching;
+  final bool embedded;
 
   @override
   State<GateSelectView> createState() => _GateSelectViewState();
@@ -29,6 +34,7 @@ class _GateSelectViewState extends State<GateSelectView> {
   GateModel? _selectedGate;
 
   bool get _switching => widget.switching;
+  bool get _embedded => widget.embedded;
 
   @override
   void initState() {
@@ -61,7 +67,12 @@ class _GateSelectViewState extends State<GateSelectView> {
     setState(() => _saving = true);
     await AuthService.setSelectedGate(gate);
     if (!mounted) return;
-    if (_switching) {
+    if (_embedded) {
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gate aktif: ${gate.namaGate}')),
+      );
+    } else if (_switching) {
       Navigator.of(context).pop(true);
     } else {
       Navigator.of(
@@ -87,7 +98,7 @@ class _GateSelectViewState extends State<GateSelectView> {
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      appBar: _switching
+      appBar: (_switching && !_embedded)
           ? AppBar(
               title: const Text('Ganti Gate'),
               leading: IconButton(
@@ -324,12 +335,14 @@ class _GateSelectViewState extends State<GateSelectView> {
                             ? null
                             : _confirmGate,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      TextButton.icon(
-                        onPressed: _saving ? null : _logout,
-                        icon: const Icon(Icons.logout_rounded, size: 18),
-                        label: const Text('Keluar / Ganti Akun'),
-                      ),
+                      if (!_embedded) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        TextButton.icon(
+                          onPressed: _saving ? null : _logout,
+                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          label: const Text('Keluar / Ganti Akun'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
