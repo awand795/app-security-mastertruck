@@ -61,6 +61,7 @@ Setiap kali Anda menambah atau memodifikasi endpoint di server API Builder (`sch
 
 1. **Samakan Query & Konfigurasi Endpoint**:
    - Query SQL, `parameters`, `enable_pagination`, HTTP method, dan `security_mode` antara **`/mastertruck/security/*` (Prod)** dan **`/kim3/security/*` (Dev)** **HARUS IDENTIK**.
+   - Untuk endpoint bertipe `GATEWAY`, isi `gateway_config` (routes, condition, target URL, headers, `requestScript`, `responseTemplate`) juga **HARUS IDENTIK**; hanya `connection_id`/prefix path yang berbeda (gateway sendiri tidak memakai koneksi DB).
    - **Perbedaan yang wajib dipertahankan hanya `connection_id`**:
      - `/mastertruck/*` → `1789369839047` (`bengkeldarkopos`)
      - `/kim3/*` → `1790050800000` (`dba_dev_pos`)
@@ -74,12 +75,39 @@ Setiap kali Anda menambah atau memodifikasi endpoint di server API Builder (`sch
 
 ## 5. Daftar Endpoint Backend yang Dipakai APK
 
-### A. DarkoPOS Auth (`lib/services/auth_service.dart`)
-- `POST /api/v1/users/login` — Login staf security (`darkoPosBaseUrl`)
-- `POST /api/v1/users/logout` — Logout sesi (`darkoPosBaseUrl`)
+### A. Autentikasi Security (`lib/services/auth_service.dart`)
+- `POST /mastertruck/security/login` — **Login staf security via API Builder Gateway** (bukan langsung ke DarkoPOS).
+  - Bertipe `GATEWAY` (bukan `DATABASE`), `security_mode = HYBRID`, `auth_token = KIM3-SECURE-TOKEN-2026-X998A7B6C`.
+  - APK mengirim body `{ userid, password, company }` + header `X-Api-Key` gateway.
+  - `gateway_config` meneruskan request ke `http://52.77.133.95:9004/api/v1/users/login` (DarkoPOS) memakai `requestScript` yang menyisipkan header `x-api-key` DarkoPOS dan menyusun body JSON. **Kunci API DarkoPOS tidak lagi disimpan di APK** (hanya di `gateway_config`).
+  - Status & body upstream diteruskan apa adanya: sukses (2xx) mengembalikan JSON DarkoPOS (`token`/`idToken`/`sessionId`/`name`), gagal (mis. 401) diteruskan dengan status yang sama.
+  - Endpoint ID & grouping:
+    - Prod: `ep-mastertruck-security-login`, path `/mastertruck/security/login`, group `Prod - Web Fleet & Security`, `connection_id = 1789369839047`.
+    - Dev: `ep-kim3-security-login`, path `/kim3/security/login`, group `Dev - Web Fleet Customer Bengkel Kim3`, `connection_id = 1790050800000`. Konfigurasi `gateway_config` wajib sama persis dengan Prod.
+  - Logika APK: bila respons `401` dan `company` terisi, APK mengulang sekali dengan `company = ''` (fallback portal web). Perilaku ini dipertahankan.
+- `POST /api/v1/users/login` — **tidak lagi dipanggil langsung oleh APK** (jalur lama, hanya untuk referensi).
+- `POST /mastertruck/security/logout` — **Logout staf security via API Builder Gateway** (endpoint `GATEWAY`).
+  - APK mengirim body `{ token, sessionId }` + header `X-Api-Key` gateway; gateway meneruskan ke `http://52.77.133.95:9004/api/v1/users/logout` dengan header `Authorization: JWT <token>` dan `x-api-key` DarkoPOS.
+  - Endpoint ID & grouping:
+    - Prod: `ep-mastertruck-security-logout`, path `/mastertruck/security/logout`, group `Prod - Web Fleet & Security`, `connection_id = 1789369839047`.
+    - Dev: `ep-kim3-security-logout`, path `/kim3/security/logout`, group `Dev - Web Fleet Customer Bengkel Kim3`, `connection_id = 1790050800000`. Konfigurasi `gateway_config` wajib sama persis dengan Prod.
+- `POST /api/v1/users/logout` — **tidak lagi dipanggil langsung oleh APK** (jalur lama, hanya untuk referensi).
+
+#### Cara Menambah Backend Login Lain (tanpa mengubah APK)
+Endpoint login memakai `executionMode: "SWITCH"`. Tambahkan route baru pada `gateway_config` endpoint `.../security/login`:
+1. Route dengan `condition` kosong = **default** (saat ini DarkoPOS). Jangan hapus route default ini.
+2. Route tambahan diisi `condition` berupa ekspresi **Spring SpEL** memakai nama parameter request, contoh `#company == 'XYZ'` atau `#provider == 'xyz'`. Variabel `#provider` opsional: jika APK belum mengirimnya, nilainya `null`.
+3. Isi `url`, `method`, `contentType`, `headers`/`authType`, serta `requestScript` (JS) bila perlu menyusun body/header rahasia. Script harus mendefinisikan `function transformRequest(params, req) { ...; return req; }`.
+4. `responseKey` hanya untuk penamaan hasil; pada `SWITCH` body respons route terpilih dikembalikan langsung.
+5. **Tidak ada failover otomatis** antar route: route dipilih berdasarkan `condition` (bukan karena route sebelumnya gagal). `errorPolicy` hanya mengatur lanjut/berhenti saat `AGGREGATE`.
+6. Sinkronkan `gateway_config` ke endpoint Dev dengan definisi identik, lalu uji kedua endpoint.
+
+> Catatan: `sch_sync.api_endpoints` dibaca ulang tiap request (tanpa cache), jadi perubahan lewat SQL langsung berlaku; tetap lakukan perubahan lewat UI API Builder bila memungkinkan agar tervalidasi.
 
 ### B. API Builder Gateway — Production (`lib/services/api_service.dart`)
 Semua dipanggil melalui `gatewayBaseUrl` (`/api/data`) dengan header `X-Api-Key`:
+- `/mastertruck/security/login` — Login staf security (endpoint `GATEWAY` → DarkoPOS, detail di bagian A)
+- `/mastertruck/security/logout` — Logout staf security (endpoint `GATEWAY` → DarkoPOS, detail di bagian A)
 - `/mastertruck/security/gates` — Daftar gerbang (dipilih setelah login sebelum masuk aplikasi utama)
 - `/mastertruck/security/checkin-candidates` — Pencarian kandidat booking / member berdasarkan nomor polisi
 - `/mastertruck/security/check-in` — Simpan transaksi check-in + foto wajib (`Depan`, `Supir`, opsional sudut lain) + `gate_id`

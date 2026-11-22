@@ -126,7 +126,11 @@ class AuthService {
     String company = 'LPM',
     GateModel? gate,
   }) async {
-    final url = Uri.parse('${ApiConfig.darkoPosBaseUrl}/api/v1/users/login');
+    // Login melalui API Gateway (API Builder) agar bisa diarahkan ke banyak
+    // backend auth tanpa perubahan APK. Gateway yang menyimpan kunci DarkoPOS.
+    final url = Uri.parse(
+      '${ApiConfig.gatewayBaseUrl}${ApiConfig.securityLoginPath}',
+    );
 
     try {
       var res = await http
@@ -134,7 +138,7 @@ class AuthService {
             url,
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': ApiConfig.darkoPosApiKey,
+              'X-Api-Key': ApiConfig.gatewayApiKey,
             },
             body: jsonEncode({
               'userid': userId,
@@ -151,7 +155,7 @@ class AuthService {
               url,
               headers: {
                 'Content-Type': 'application/json',
-                'x-api-key': ApiConfig.darkoPosApiKey,
+                'X-Api-Key': ApiConfig.gatewayApiKey,
               },
               body: jsonEncode({
                 'userid': userId,
@@ -256,23 +260,26 @@ class AuthService {
     final token = _currentSession?.idToken;
     final sessionId = _currentSession?.sessionId;
 
-    if (token != null) {
-      try {
-        final url = Uri.parse(
-          '${ApiConfig.darkoPosBaseUrl}/api/v1/users/logout',
-        );
-        await http
-            .post(
-              url,
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'JWT $token',
-              },
-              body: jsonEncode({'sessionId': sessionId ?? ''}),
-            )
-            .timeout(const Duration(seconds: 5));
-      } catch (_) {}
-    }
+    // Logout juga via API Gateway (darkosync) agar backend auth konsisten
+    // dan bisa diganti tanpa ubah APK. Token user diteruskan sebagai param.
+    try {
+      final url = Uri.parse(
+        '${ApiConfig.gatewayBaseUrl}${ApiConfig.securityLogoutPath}',
+      );
+      await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Key': ApiConfig.gatewayApiKey,
+            },
+            body: jsonEncode({
+              'token': token ?? '',
+              'sessionId': sessionId ?? '',
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
 
     _currentSession = null;
     final prefs = await SharedPreferences.getInstance();
