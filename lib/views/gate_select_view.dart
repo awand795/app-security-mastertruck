@@ -10,8 +10,13 @@ import 'login_view.dart';
 
 /// Layar wajib pemilihan Gate setelah login.
 /// Petugas belum dapat menggunakan aplikasi sebelum memilih gerbang tugasnya.
+///
+/// Jika [switching] = true, layar dipakai untuk mengganti gate aktif saat
+/// sudah login; setelah konfirmasi kembali ke layar sebelumnya.
 class GateSelectView extends StatefulWidget {
-  const GateSelectView({super.key});
+  const GateSelectView({super.key, this.switching = false});
+
+  final bool switching;
 
   @override
   State<GateSelectView> createState() => _GateSelectViewState();
@@ -23,6 +28,8 @@ class _GateSelectViewState extends State<GateSelectView> {
   List<GateModel> _gates = [];
   GateModel? _selectedGate;
 
+  bool get _switching => widget.switching;
+
   @override
   void initState() {
     super.initState();
@@ -33,8 +40,17 @@ class _GateSelectViewState extends State<GateSelectView> {
     setState(() => _loading = true);
     final gates = await ApiService.getGates();
     if (!mounted) return;
+    final currentId = AuthService.currentSession?.gateId;
     setState(() {
       _gates = gates;
+      GateModel? match;
+      for (final g in gates) {
+        if (g.id == currentId) {
+          match = g;
+          break;
+        }
+      }
+      _selectedGate = match ?? (gates.isNotEmpty ? gates.first : null);
       _loading = false;
     });
   }
@@ -45,9 +61,13 @@ class _GateSelectViewState extends State<GateSelectView> {
     setState(() => _saving = true);
     await AuthService.setSelectedGate(gate);
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeNavView()));
+    if (_switching) {
+      Navigator.of(context).pop(true);
+    } else {
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeNavView()));
+    }
   }
 
   Future<void> _logout() async {
@@ -67,6 +87,15 @@ class _GateSelectViewState extends State<GateSelectView> {
 
     return Scaffold(
       backgroundColor: scheme.surface,
+      appBar: _switching
+          ? AppBar(
+              title: const Text('Ganti Gate'),
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            )
+          : null,
       body: Stack(
         children: [
           Positioned(
@@ -124,7 +153,9 @@ class _GateSelectViewState extends State<GateSelectView> {
                                   ),
                                 ),
                                 Text(
-                                  'Pilih gerbang (Gate) tugas Anda sebelum memulai.',
+                                  _switching
+                                      ? 'Pilih gerbang (Gate) tugas baru Anda.'
+                                      : 'Pilih gerbang (Gate) tugas Anda sebelum memulai.',
                                   style: texts.bodySmall?.copyWith(
                                     color: scheme.onSurfaceVariant,
                                   ),
@@ -284,6 +315,8 @@ class _GateSelectViewState extends State<GateSelectView> {
                       AppButton(
                         label: _selectedGate == null
                             ? 'Pilih Gate Terlebih Dahulu'
+                            : _switching
+                            ? 'Gunakan ${_selectedGate!.namaGate}'
                             : 'Masuk ke ${_selectedGate!.namaGate}',
                         icon: Icons.arrow_forward_rounded,
                         loading: _saving,

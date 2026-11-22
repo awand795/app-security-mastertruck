@@ -14,10 +14,12 @@ class ProfileSheet extends StatelessWidget {
     super.key,
     required this.session,
     required this.onLogout,
+    this.onSwitchGate,
   });
 
   final UserSession? session;
   final VoidCallback onLogout;
+  final VoidCallback? onSwitchGate;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +119,15 @@ class ProfileSheet extends StatelessWidget {
                   style: texts.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.lg),
+                if (onSwitchGate != null) ...[
+                  AppButton(
+                    label: 'Ganti Gate',
+                    icon: Icons.door_sliding_rounded,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: onSwitchGate,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
                 AppButton(
                   label: 'Keluar dari Akun',
                   icon: Icons.logout_rounded,

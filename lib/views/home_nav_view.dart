@@ -12,6 +12,7 @@ import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
 import 'active_inside_view.dart';
 import 'beranda_view.dart';
+import 'gate_select_view.dart';
 import 'check_in_view.dart';
 import 'check_out_view.dart';
 import 'login_view.dart';
@@ -182,11 +183,28 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
       builder: (sheetContext) => ProfileSheet(
         session: session,
         onLogout: () => Navigator.of(sheetContext).pop('logout'),
+        onSwitchGate: () => Navigator.of(sheetContext).pop('switch_gate'),
       ),
     );
 
-    if (!mounted || action != 'logout') return;
-    await _confirmLogout();
+    if (!mounted) return;
+    if (action == 'logout') {
+      await _confirmLogout();
+      return;
+    }
+    if (action == 'switch_gate') {
+      await _openGateSwitch();
+    }
+  }
+
+  Future<void> _openGateSwitch() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const GateSelectView(switching: true)),
+    );
+    if (!mounted || changed != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Gate aktif berhasil diperbarui.')),
+    );
   }
 
   Future<void> _confirmLogout() async {
