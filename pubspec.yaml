@@ -22,6 +22,7 @@ dependencies:
   tflite_flutter: ^0.12.1
   path_provider: ^2.1.6
   geolocator: ^13.0.2
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

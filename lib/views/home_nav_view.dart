@@ -16,6 +16,7 @@ import 'gate_select_view.dart';
 import 'check_in_view.dart';
 import 'check_out_view.dart';
 import 'login_view.dart';
+import 'panduan_sop_view.dart';
 import 'today_exit_view.dart';
 
 class HomeNavView extends StatefulWidget {
@@ -189,11 +190,18 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
       useSafeArea: true,
       builder: (sheetContext) => ProfileSheet(
         session: session,
+        onOpenPanduan: () => Navigator.of(sheetContext).pop('panduan'),
         onLogout: () => Navigator.of(sheetContext).pop('logout'),
       ),
     );
 
-    if (!mounted || action != 'logout') return;
+    if (!mounted) return;
+    if (action == 'panduan') {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const PanduanSopView()));
+      return;
+    }
+    if (action != 'logout') return;
     await _confirmLogout();
   }
 

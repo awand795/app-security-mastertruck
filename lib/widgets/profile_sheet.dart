@@ -15,11 +15,13 @@ class ProfileSheet extends StatelessWidget {
     required this.session,
     required this.onLogout,
     this.onSwitchGate,
+    this.onOpenPanduan,
   });
 
   final UserSession? session;
   final VoidCallback onLogout;
   final VoidCallback? onSwitchGate;
+  final VoidCallback? onOpenPanduan;
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +121,15 @@ class ProfileSheet extends StatelessWidget {
                   style: texts.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.lg),
+                if (onOpenPanduan != null) ...[
+                  AppButton(
+                    label: 'Panduan & SOP Petugas',
+                    icon: Icons.menu_book_rounded,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: onOpenPanduan,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
                 if (onSwitchGate != null) ...[
                   AppButton(
                     label: 'Ganti Gate',

@@ -69,9 +69,9 @@ class _GateSelectViewState extends State<GateSelectView> {
     if (!mounted) return;
     if (_embedded) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gate aktif: ${gate.namaGate}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gate aktif: ${gate.namaGate}')));
     } else if (_switching) {
       Navigator.of(context).pop(true);
     } else {

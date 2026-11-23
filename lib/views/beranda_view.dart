@@ -7,6 +7,7 @@ import '../models/memo_keluar_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
+import 'panduan_sop_view.dart';
 
 /// Data yang sudah tersedia dari ApiService untuk ringkasan Beranda.
 typedef BerandaData = ({List<ActiveVehicle> active, List<MemoKeluar> exited});
@@ -167,6 +168,56 @@ class _BerandaViewState extends State<BerandaView> {
                   progressCount: progressCount,
                   exitedToday: exitedToday,
                   onTap: () => widget.onOpenTab(2),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppCard(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PanduanSopView()),
+                    );
+                  },
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Icon(
+                          Icons.menu_book_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Panduan & SOP Petugas',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              'Lihat prosedur Check-In, Check-Out & Scan Plat',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 SectionHeader(

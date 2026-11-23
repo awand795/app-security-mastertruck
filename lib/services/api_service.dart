@@ -9,6 +9,7 @@ import '../models/employee_model.dart';
 import '../models/gate_model.dart';
 import '../models/lokasi_model.dart';
 import '../models/memo_keluar_model.dart';
+import '../models/panduan_apk_model.dart';
 import '../models/set_foto_model.dart';
 import '../models/tujuan_kedatangan_model.dart';
 
@@ -119,6 +120,33 @@ class ApiService {
           return list
               .map((e) => SetFotoItem.fromJson(e as Map<String, dynamic>))
               .where((f) => f.isActive && f.kodeFoto.isNotEmpty)
+              .toList();
+        }
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // 0d. Get Active Panduan & SOP APK from Database
+  static Future<List<PanduanApkItem>> getPanduanApk() async {
+    final uri = Uri.parse(
+      '${ApiConfig.gatewayBaseUrl}/mastertruck/security/panduan-apk',
+    );
+    try {
+      final res = await http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final list = (data is Map && data['data'] is List)
+            ? data['data']
+            : data;
+        if (list is List) {
+          return list
+              .map((e) => PanduanApkItem.fromJson(e as Map<String, dynamic>))
+              .where((p) => p.isActive)
               .toList();
         }
       }
