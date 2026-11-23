@@ -285,7 +285,7 @@ class _GreetingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final texts = Theme.of(context).textTheme;
-    final gateName = AuthService.currentSession?.gateName ?? 'Pos Gerbang';
+    final gateName = AuthService.currentSession?.gateName ?? 'Gerbang';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,7 +343,7 @@ class _GreetingHeader extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '${_dateLabel(now)} · Pos Gerbang DarkoGate',
+                '${_dateLabel(now)} · DarkoGate',
                 maxLines: 2,
                 style: texts.bodySmall,
               ),

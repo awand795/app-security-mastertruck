@@ -169,7 +169,7 @@ class _LoginViewState extends State<LoginView> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        'DARKOGATE · POS GERBANG',
+                        'DARKOGATE',
                         style: texts.labelMedium?.copyWith(
                           color: scheme.primary,
                           fontWeight: FontWeight.w800,
@@ -186,7 +186,7 @@ class _LoginViewState extends State<LoginView> {
                       ),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
-                        'Masuk dengan akun POS terdaftar untuk memulai tugas gerbang.',
+                        'Masuk dengan akun terdaftar untuk memulai tugas gerbang.',
                         style: texts.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -231,7 +231,7 @@ class _LoginViewState extends State<LoginView> {
                 controller: _userIdController,
                 focusNode: _userIdFocus,
                 label: 'User ID Petugas',
-                hint: 'Masukkan User ID POS Anda',
+                hint: 'Masukkan User ID Anda',
                 prefixIcon: Icons.badge_outlined,
                 textInputAction: TextInputAction.next,
                 autofillHints: const [AutofillHints.username],

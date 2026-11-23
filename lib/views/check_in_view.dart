@@ -561,7 +561,7 @@ class _CheckInViewState extends State<CheckInView> {
         : _selectedTujuan!.kodeTujuan;
 
     final session = AuthService.currentSession;
-    final petugas = session?.name ?? 'Pos Security DarkoGate';
+    final petugas = session?.name ?? 'Security DarkoGate';
     final res = await ApiService.postCheckIn(
       noPolisi: cleanPlate,
       namaPengemudi: driver,

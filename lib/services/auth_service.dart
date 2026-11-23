@@ -185,14 +185,14 @@ class AuthService {
       if (res.statusCode == 404) {
         return {
           'success': false,
-          'message': 'Layanan autentikasi POS sedang tidak tersedia. Silakan hubungi tim administrator bengkel.',
+          'message': 'Layanan autentikasi sedang tidak tersedia. Silakan hubungi tim administrator bengkel.',
         };
       }
 
       if (res.statusCode >= 500) {
         return {
           'success': false,
-          'message': 'Terjadi kendala pada server sistem POS. Silakan coba kembali beberapa saat lagi.',
+          'message': 'Terjadi kendala pada server sistem. Silakan coba kembali beberapa saat lagi.',
         };
       }
 
@@ -246,12 +246,12 @@ class AuthService {
     } on TimeoutException {
       return {
         'success': false,
-        'message': 'Waktu koneksi ke server POS habis. Pastikan jaringan internet stabil dan coba kembali.',
+        'message': 'Waktu koneksi ke server habis. Pastikan jaringan internet stabil dan coba kembali.',
       };
     } catch (_) {
       return {
         'success': false,
-        'message': 'Tidak dapat terhubung ke server autentikasi POS. Pastikan koneksi internet stabil atau hubungi tim sistem.',
+        'message': 'Tidak dapat terhubung ke server autentikasi. Pastikan koneksi internet stabil atau hubungi tim sistem.',
       };
     }
   }

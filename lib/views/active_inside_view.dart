@@ -136,7 +136,7 @@ class _ActiveInsideViewState extends State<ActiveInsideView> {
     final session = AuthService.currentSession;
     final res = await ApiService.postReEnter(
       kunjunganId: vehicle.id,
-      petugasSecurity: session?.name ?? 'Pos Security',
+      petugasSecurity: session?.name ?? 'Security',
       gateMasukId: session?.gateId,
       gateMasukName: session?.gateName,
     );

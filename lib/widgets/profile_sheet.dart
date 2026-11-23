@@ -147,7 +147,7 @@ class ProfileSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'DarkoGate · Pos Security Gerbang',
+                  'DarkoGate · Security Gerbang',
                   textAlign: TextAlign.center,
                   style: texts.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,

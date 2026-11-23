@@ -502,7 +502,7 @@ class _CheckOutViewState extends State<CheckOutView> {
       }
     }
 
-    final petugas = session?.name ?? 'Pos Security DarkoGate';
+    final petugas = session?.name ?? 'Security DarkoGate';
     final res = await ApiService.postCheckOut(
       kunjunganId: vehicle.id,
       petugasSecurityKeluar: petugas,
