@@ -33,7 +33,7 @@ class ProfileSheet extends StatelessWidget {
         session?.namaCabang ??
         (session?.kodeCabang != null
             ? 'Cabang ${session!.kodeCabang}'
-            : 'Bengkel DarkoGate KIM 3');
+            : 'Bengkel DarkoGate');
 
     return SafeArea(
       top: false,
@@ -147,7 +147,7 @@ class ProfileSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'DarkoGate · Pos Security Gerbang KIM 3',
+                  'DarkoGate · Pos Security Gerbang',
                   textAlign: TextAlign.center,
                   style: texts.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,

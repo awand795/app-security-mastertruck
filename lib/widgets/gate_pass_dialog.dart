@@ -248,7 +248,7 @@ class _GatePassDialogState extends State<GatePassDialog> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'DarkoGate KIM 3',
+                                        'DarkoGate',
                                         style: texts.titleSmall?.copyWith(
                                           fontWeight: FontWeight.w800,
                                         ),

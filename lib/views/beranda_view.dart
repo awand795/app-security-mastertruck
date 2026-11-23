@@ -343,7 +343,7 @@ class _GreetingHeader extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '${_dateLabel(now)} · Pos Gerbang KIM 3',
+                '${_dateLabel(now)} · Pos Gerbang DarkoGate',
                 maxLines: 2,
                 style: texts.bodySmall,
               ),

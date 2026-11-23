@@ -12,7 +12,7 @@ import '../services/location_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/app_widgets.dart';
-import '../widgets/gate_pass_dialog.dart';
+import '../widgets/completion_dialog.dart';
 import '../widgets/photo_quad_picker.dart';
 
 class CheckInView extends StatefulWidget {
@@ -25,6 +25,7 @@ class CheckInView extends StatefulWidget {
     this.setFotoLoader,
     this.locationValidator,
     this.dockCtaNotifier,
+    this.onGoToBeranda,
   });
 
   /// Opsional untuk preview/test; produksi memakai ApiService.
@@ -37,6 +38,7 @@ class CheckInView extends StatefulWidget {
   final Future<LocationCheckResult> Function(LokasiItem lokasi)?
   locationValidator;
   final ValueNotifier<Widget?>? dockCtaNotifier;
+  final VoidCallback? onGoToBeranda;
 
   @override
   State<CheckInView> createState() => _CheckInViewState();
@@ -51,8 +53,6 @@ class _CheckInViewState extends State<CheckInView> {
   final _customTipeController = TextEditingController();
   final _picController = TextEditingController();
 
-  String _kategoriTujuan = 'SERVICE';
-  String _subTujuan = 'SERVICE';
   String _jenisKedatangan = 'WALK_IN';
   int? _bookingId;
   String? _selectedPic;
@@ -184,8 +184,6 @@ class _CheckInViewState extends State<CheckInView> {
         _tujuanList = items;
         if (_selectedTujuan == null && items.isNotEmpty) {
           _selectedTujuan = items.first;
-          _kategoriTujuan = items.first.kodeTujuan;
-          _subTujuan = items.first.kodeTujuan;
         }
         _isLoadingTujuan = false;
       });
@@ -193,11 +191,7 @@ class _CheckInViewState extends State<CheckInView> {
       if (!mounted) return;
       setState(() {
         _tujuanList = _fallbackTujuan;
-        if (_selectedTujuan == null) {
-          _selectedTujuan = _fallbackTujuan.first;
-          _kategoriTujuan = _fallbackTujuan.first.kodeTujuan;
-          _subTujuan = _fallbackTujuan.first.kodeTujuan;
-        }
+        _selectedTujuan ??= _fallbackTujuan.first;
         _isLoadingTujuan = false;
       });
     }
@@ -301,18 +295,12 @@ class _CheckInViewState extends State<CheckInView> {
           : 'WALK_IN_MEMBER';
       _plateError = null;
       _driverError = null;
+      _phoneError = null;
       _picError = null;
 
-      final driverName = candidate.effectiveDriverName;
-      final phone = candidate.effectivePhone;
+      // Nama & nomor telepon pengemudi tidak diisi otomatis dari API
+      // karena data API berisi nama PT/perusahaan, bukan pengemudi aktual.
       final complaint = candidate.effectiveComplaint;
-
-      if (forceFill || _driverNameController.text.trim().isEmpty) {
-        if (driverName.isNotEmpty) _driverNameController.text = driverName;
-      }
-      if (forceFill || _driverPhoneController.text.trim().isEmpty) {
-        if (phone.isNotEmpty) _driverPhoneController.text = phone;
-      }
       if (forceFill || _complaintController.text.trim().isEmpty) {
         if (complaint.isNotEmpty) _complaintController.text = complaint;
       }
@@ -326,8 +314,6 @@ class _CheckInViewState extends State<CheckInView> {
             );
         _selectedTujuan = serviceItem;
         _customTipeController.clear();
-        _kategoriTujuan = serviceItem?.kodeTujuan ?? 'SERVICE';
-        _subTujuan = serviceItem?.kodeTujuan ?? 'SERVICE';
         _tujuanError = null;
       }
     });
@@ -575,7 +561,7 @@ class _CheckInViewState extends State<CheckInView> {
         : _selectedTujuan!.kodeTujuan;
 
     final session = AuthService.currentSession;
-    final petugas = session?.name ?? 'Pos Security KIM 3';
+    final petugas = session?.name ?? 'Pos Security DarkoGate';
     final res = await ApiService.postCheckIn(
       noPolisi: cleanPlate,
       namaPengemudi: driver,
@@ -598,7 +584,6 @@ class _CheckInViewState extends State<CheckInView> {
 
     if (res['success'] == true) {
       final kunjunganId = res['kunjungan_id'];
-      final nomorTiket = res['nomor_tiket'] ?? 'TKT-KIM3';
       var failedUploads = 0;
       var totalUploads = 0;
 
@@ -643,19 +628,16 @@ class _CheckInViewState extends State<CheckInView> {
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => GatePassDialog(
-          nomorTiket: nomorTiket,
+        builder: (_) => CompletionDialog(
+          title: 'Check-In Selesai',
           noPolisi: formatPlate(cleanPlate),
           namaPengemudi: driver,
-          tipeKunjungan: _kategoriTujuan == 'UMUM' ? 'Umum' : _subTujuan,
-          keluhan: complaint.isEmpty ? 'Pengecekan armada' : complaint,
-          waktuMasuk: 'Baru Saja',
-          petugasSecurity: petugas,
           uploadWarning: failedUploads == 0
               ? null
               : '$failedUploads dari $totalUploads foto gagal diunggah. '
                     'Data check-in tetap tersimpan, tetapi foto masuk belum lengkap.',
-          onClose: _resetForm,
+          onDone: _resetForm,
+          onGoToBeranda: widget.onGoToBeranda,
         ),
       );
     } else {
@@ -678,16 +660,12 @@ class _CheckInViewState extends State<CheckInView> {
       _notesController.clear();
       _customTipeController.clear();
       _picController.clear();
-      _kategoriTujuan = 'SERVICE';
-      _subTujuan = 'SERVICE';
       _jenisKedatangan = 'WALK_IN';
       _bookingId = null;
       _selectedCandidate = null;
       _selectedPic = null;
       _selectedEmployee = null;
       _selectedTujuan = _tujuanList.isNotEmpty ? _tujuanList.first : null;
-      _kategoriTujuan = _selectedTujuan?.kodeTujuan ?? 'SERVICE';
-      _subTujuan = _selectedTujuan?.kodeTujuan ?? 'SERVICE';
       _hasSearchedPlate = false;
       _candidates.clear();
       _photos.clear();
@@ -772,8 +750,7 @@ class _CheckInViewState extends State<CheckInView> {
                           PlateViewfinder(
                             plate: _nopolController.text,
                             onTap: _openAnprScanner,
-                            helperText:
-                                'Ketuk untuk memindai plat nomor (OCR Offline)',
+                            helperText: 'Ketuk untuk memindai plat nomor',
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           PlateInput(
@@ -880,8 +857,6 @@ class _CheckInViewState extends State<CheckInView> {
                                   onTap: () {
                                     setState(() {
                                       _selectedTujuan = item;
-                                      _kategoriTujuan = item.kodeTujuan;
-                                      _subTujuan = item.kodeTujuan;
                                       _customTipeController.clear();
                                       _tujuanError = null;
                                       _picError = null;

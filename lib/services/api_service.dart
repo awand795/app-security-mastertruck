@@ -9,6 +9,7 @@ import '../models/employee_model.dart';
 import '../models/gate_model.dart';
 import '../models/lokasi_model.dart';
 import '../models/memo_keluar_model.dart';
+import '../models/ms_foto_model.dart';
 import '../models/panduan_apk_model.dart';
 import '../models/set_foto_model.dart';
 import '../models/tujuan_kedatangan_model.dart';
@@ -416,6 +417,33 @@ class ApiService {
         final data = jsonDecode(res.body);
         if (data is List) {
           return data.map((e) => MemoKeluar.fromJson(e)).toList();
+        }
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // 6b. Get photos for a visit (ms_foto)
+  static Future<List<MsFoto>> getFotoKunjungan(int kunjunganId) async {
+    final uri = Uri.parse(
+      '${ApiConfig.gatewayBaseUrl}/mastertruck/security/foto-kunjungan',
+    ).replace(queryParameters: {'kunjungan_id': kunjunganId.toString()});
+
+    try {
+      final res = await http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final list = (data is Map && data['data'] is List)
+            ? data['data']
+            : data;
+        if (list is List) {
+          return list
+              .map((e) => MsFoto.fromJson(e as Map<String, dynamic>))
+              .toList();
         }
       }
       return [];

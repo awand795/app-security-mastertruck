@@ -1,23 +1,49 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../config/theme.dart';
 import '../models/memo_keluar_model.dart';
+import '../models/ms_foto_model.dart';
 import '../services/api_service.dart';
 import '../widgets/app_widgets.dart';
-import '../widgets/gate_pass_dialog.dart';
 
-/// Riwayat gate pass kendaraan yang sudah keluar hari ini.
+/// Riwayat gate pass kendaraan yang sudah keluar hari ini dan kemarin.
 ///
-/// Pencarian memakai [SearchField] yang di-debounce, dan daftar dapat ditarik untuk menyegarkan data.
+/// Pencarian memakai [SearchField] yang di-debounce, daftar dapat ditarik
+/// untuk menyegarkan data, dan setiap item dapat dibuka detailnya beserta
+/// foto dokumentasi kunjungan.
 class TodayExitView extends StatefulWidget {
-  const TodayExitView({super.key, this.memoLoader, this.clock});
+  const TodayExitView({
+    super.key,
+    this.memoLoader,
+    this.photoLoader,
+    this.fotoLoader,
+    this.photosLoader,
+    this.imageLoader,
+    this.clock,
+  });
 
   /// Opsional untuk preview/test; produksi memakai [ApiService].
   final Future<List<MemoKeluar>> Function(String query)? memoLoader;
 
+  /// Opsional untuk preview/test foto; produksi memakai [ApiService].
+  final Future<List<MsFoto>> Function(int kunjunganId)? photoLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? fotoLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? photosLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? imageLoader;
+
   /// Opsional agar filter tanggal di preview stabil.
   final DateTime Function()? clock;
+
+  Future<List<MsFoto>> Function(int kunjunganId) get resolvedPhotoLoader =>
+      photoLoader ??
+      fotoLoader ??
+      photosLoader ??
+      imageLoader ??
+      ((int id) => ApiService.getFotoKunjungan(id));
 
   @override
   State<TodayExitView> createState() => _TodayExitViewState();
@@ -103,22 +129,29 @@ class _TodayExitViewState extends State<TodayExitView> {
 
   List<MemoKeluar> get _filteredMemos {
     final now = widget.clock?.call() ?? DateTime.now();
-    return _memos.where((m) => _isSameDay(m.waktuKeluar, now)).toList();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final list = _memos
+        .where(
+          (m) =>
+              _isSameDay(m.waktuKeluar, now) ||
+              _isSameDay(m.waktuKeluar, yesterday),
+        )
+        .toList();
+    list.sort((a, b) {
+      final ta = a.waktuKeluar?.millisecondsSinceEpoch ?? 0;
+      final tb = b.waktuKeluar?.millisecondsSinceEpoch ?? 0;
+      return tb.compareTo(ta);
+    });
+    return list;
   }
 
-  void _showGatePass(MemoKeluar memo) {
+  void _showDetail(MemoKeluar memo) {
     showDialog<void>(
       context: context,
-      builder: (_) => GatePassDialog(
-        title: 'Gate Pass / Memo Keluar Digital',
-        codeNumber: memo.nomorMemo,
-        nopol: memo.noPolisi,
-        driverName: memo.namaPengemudi,
-        customerName: memo.namaPelanggan,
-        spkNumber: memo.nomorSpk,
-        invoiceNumber: memo.nomorInvoice,
-        dateTime: memo.waktuKeluar ?? widget.clock?.call() ?? DateTime.now(),
-        isExit: true,
+      builder: (_) => _MemoDetailDialog(
+        memo: memo,
+        photoLoader: widget.resolvedPhotoLoader,
+        clock: widget.clock,
       ),
     );
   }
@@ -180,7 +213,7 @@ class _TodayExitViewState extends State<TodayExitView> {
                             ),
                             const SizedBox(width: 5),
                             Text(
-                              'Hari ini (${DateFormat('dd MMM yyyy').format(widget.clock?.call() ?? DateTime.now())})',
+                              'Hari ini & kemarin',
                               style: texts.labelSmall?.copyWith(
                                 color: scheme.primary,
                                 fontWeight: FontWeight.w700,
@@ -239,7 +272,7 @@ class _TodayExitViewState extends State<TodayExitView> {
                             index: index,
                             child: _MemoCard(
                               memo: memo,
-                              onOpenGatePass: () => _showGatePass(memo),
+                              onOpenDetail: () => _showDetail(memo),
                             ),
                           ),
                         );
@@ -270,8 +303,8 @@ class _TodayExitViewState extends State<TodayExitView> {
 
     return EmptyState(
       icon: Icons.receipt_long_outlined,
-      title: 'Belum ada kendaraan keluar hari ini',
-      message: 'Memo gate pass hari ini akan muncul di sini setelah kendaraan check-out.',
+      title: 'Belum ada kendaraan keluar',
+      message: 'Memo gate pass hari ini dan kemarin akan muncul di sini setelah kendaraan check-out.',
       actionLabel: 'Muat ulang',
       actionIcon: Icons.refresh_rounded,
       onAction: () => _loadData(showSkeleton: true, showSearching: false),
@@ -280,10 +313,10 @@ class _TodayExitViewState extends State<TodayExitView> {
 }
 
 class _MemoCard extends StatelessWidget {
-  const _MemoCard({required this.memo, required this.onOpenGatePass});
+  const _MemoCard({required this.memo, required this.onOpenDetail});
 
   final MemoKeluar memo;
-  final VoidCallback onOpenGatePass;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -416,19 +449,367 @@ class _MemoCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.xs),
               AppButton(
-                label: 'Gate Pass',
-                icon: Icons.qr_code_2_rounded,
+                label: 'Detail',
+                icon: Icons.visibility_rounded,
                 variant: AppButtonVariant.secondary,
                 size: AppButtonSize.medium,
                 expanded: false,
-                semanticLabel: 'Lihat gate pass ${memo.noPolisi}',
-                onPressed: onOpenGatePass,
+                semanticLabel: 'Lihat detail ${memo.noPolisi}',
+                onPressed: onOpenDetail,
               ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+class _MemoDetailDialog extends StatefulWidget {
+  const _MemoDetailDialog({
+    required this.memo,
+    required this.photoLoader,
+    this.clock,
+  });
+
+  final MemoKeluar memo;
+  final Future<List<MsFoto>> Function(int kunjunganId) photoLoader;
+  final DateTime Function()? clock;
+
+  @override
+  State<_MemoDetailDialog> createState() => _MemoDetailDialogState();
+}
+
+class _MemoDetailDialogState extends State<_MemoDetailDialog> {
+  List<MsFoto> _photos = const [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhotos();
+  }
+
+  Future<void> _loadPhotos() async {
+    try {
+      final photos = await widget.photoLoader(widget.memo.id);
+      if (!mounted) return;
+      setState(() {
+        _photos = photos;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _photos = const [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+    final memo = widget.memo;
+    final exitTime = memo.waktuKeluar == null
+        ? '-'
+        : DateFormat('dd MMM yyyy, HH:mm').format(memo.waktuKeluar!);
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(AppSpacing.md),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 720),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Detail Memo Keluar',
+                      style: texts.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PlateBadge(
+                      memo.noPolisi,
+                      size: PlateBadgeSize.small,
+                      maxWidth: 220,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _DetailRow(label: 'Nomor memo', value: memo.nomorMemo),
+                    _DetailRow(
+                      label: 'Pengemudi',
+                      value: memo.namaPengemudi ?? '-',
+                    ),
+                    _DetailRow(
+                      label: 'Pelanggan',
+                      value: memo.namaPelanggan ?? '-',
+                    ),
+                    _DetailRow(
+                      label: 'Tujuan',
+                      value: memo.subTujuan ?? memo.statusKunjungan,
+                    ),
+                    _DetailRow(label: 'Waktu keluar', value: exitTime),
+                    _DetailRow(
+                      label: 'Petugas keluar',
+                      value: memo.petugasSecurityKeluar ?? '-',
+                    ),
+                    _DetailRow(
+                      label: 'Gate masuk',
+                      value: memo.gateMasukNama ?? '-',
+                    ),
+                    _DetailRow(
+                      label: 'Gate keluar',
+                      value: memo.gateKeluarNama ?? '-',
+                    ),
+                    if (memo.alasanKeluar?.trim().isNotEmpty == true)
+                      _DetailRow(
+                        label: 'Alasan keluar',
+                        value: memo.alasanKeluar!,
+                      ),
+                    if (memo.catatanKeluar?.trim().isNotEmpty == true)
+                      _DetailRow(label: 'Catatan', value: memo.catatanKeluar!),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Dokumentasi Foto (${_photos.length})',
+                      style: texts.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(AppSpacing.lg),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_photos.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Text(
+                          'Tidak ada foto dokumentasi tersimpan.',
+                          style: texts.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    else
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: AppSpacing.xs,
+                              crossAxisSpacing: AppSpacing.xs,
+                              childAspectRatio: 4 / 3,
+                            ),
+                        itemCount: _photos.length,
+                        itemBuilder: (context, index) {
+                          final photo = _photos[index];
+                          return _PhotoTile(photo: photo);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Tutup',
+                      variant: AppButtonVariant.secondary,
+                      size: AppButtonSize.medium,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Gate Pass',
+                      icon: Icons.qr_code_2_rounded,
+                      size: AppButtonSize.medium,
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        // Gate pass handled by caller; reopen not needed.
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: texts.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: texts.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({required this.photo});
+
+  final MsFoto photo;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = _imageProvider(photo.fotoData);
+    return GestureDetector(
+      onTap: provider == null
+          ? null
+          : () => _openZoom(context, provider, photo.sudutPandang),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          color: Colors.black12,
+          child: provider == null
+              ? const Center(child: Icon(Icons.broken_image_rounded))
+              : Image(
+                  image: provider,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      const Center(child: Icon(Icons.broken_image_rounded)),
+                ),
+        ),
+      ),
+    );
+  }
+
+  void _openZoom(BuildContext context, ImageProvider provider, String title) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 720),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Flexible(
+                child: InteractiveViewer(
+                  child: Image(image: provider, fit: BoxFit.contain),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Tutup'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+ImageProvider? _imageProvider(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return NetworkImage(trimmed);
+  }
+
+  String base64Part = trimmed;
+  if (trimmed.startsWith('data:')) {
+    final idx = trimmed.indexOf('base64,');
+    if (idx >= 0) {
+      base64Part = trimmed.substring(idx + 7);
+    } else {
+      return null;
+    }
+  } else {
+    // Deteksi hex bytea (Postgres) sederhana.
+    final head = trimmed.substring(0, trimmed.length.clamp(0, 16));
+    if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(head) && trimmed.length.isEven) {
+      try {
+        final bytes = <int>[];
+        for (var i = 0; i < trimmed.length; i += 2) {
+          bytes.add(int.parse(trimmed.substring(i, i + 2), radix: 16));
+        }
+        return MemoryImage(Uint8List.fromList(bytes));
+      } catch (_) {
+        // Fall through to base64 handling.
+      }
+    }
+  }
+
+  try {
+    return MemoryImage(base64Decode(base64Part));
+  } catch (_) {
+    return null;
   }
 }
 

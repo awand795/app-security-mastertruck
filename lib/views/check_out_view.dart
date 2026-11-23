@@ -11,7 +11,7 @@ import '../services/location_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/app_widgets.dart';
-import '../widgets/gate_pass_dialog.dart';
+import '../widgets/completion_dialog.dart';
 import '../widgets/photo_quad_picker.dart';
 
 class CheckOutView extends StatefulWidget {
@@ -25,6 +25,7 @@ class CheckOutView extends StatefulWidget {
   final Future<LocationCheckResult> Function(LokasiItem lokasi)?
   locationValidator;
   final ValueNotifier<Widget?>? dockCtaNotifier;
+  final VoidCallback? onGoToBeranda;
 
   const CheckOutView({
     super.key,
@@ -35,6 +36,7 @@ class CheckOutView extends StatefulWidget {
     this.setFotoLoader,
     this.locationValidator,
     this.dockCtaNotifier,
+    this.onGoToBeranda,
   });
 
   @override
@@ -42,22 +44,12 @@ class CheckOutView extends StatefulWidget {
 }
 
 class _CheckOutViewState extends State<CheckOutView> {
-  static const List<String> _reasonOptions = [
-    'Selesai kunjungan',
-    'Ambil sparepart',
-    'Test drive',
-    'Ambil dokumen',
-    'Lainnya',
-  ];
-
   final _nopolController = TextEditingController();
   final _notesController = TextEditingController();
   final _reasonController = TextEditingController();
 
   String? _plateError;
   String? _lokasiError;
-  String? _reasonError;
-  String? _selectedReasonChip;
   ActiveVehicle? _selectedVehicle;
   List<LokasiItem> _lokasiList = [];
   LokasiItem? _selectedLokasi;
@@ -212,7 +204,7 @@ class _CheckOutViewState extends State<CheckOutView> {
     _nopolController.clear();
     setState(() {
       _plateError = null;
-      _reasonError = null;
+      _lokasiError = null;
       _selectedVehicle = null;
       _hasLookedUp = false;
     });
@@ -222,7 +214,7 @@ class _CheckOutViewState extends State<CheckOutView> {
   void _handlePlateChanged(String _) {
     setState(() {
       _plateError = null;
-      _reasonError = null;
+      _lokasiError = null;
       _selectedVehicle = null;
       _hasLookedUp = false;
     });
@@ -231,7 +223,6 @@ class _CheckOutViewState extends State<CheckOutView> {
   bool get _hasInput =>
       _notesController.text.trim().isNotEmpty ||
       _reasonController.text.trim().isNotEmpty ||
-      _selectedReasonChip != null ||
       _exitPhotos.isNotEmpty;
 
   /// Mengosongkan isian form keluar tanpa menyentuh nomor polisi/kendaraan.
@@ -266,8 +257,6 @@ class _CheckOutViewState extends State<CheckOutView> {
     setState(() {
       _notesController.clear();
       _reasonController.clear();
-      _selectedReasonChip = null;
-      _reasonError = null;
       _exitPhotos.clear();
     });
   }
@@ -324,6 +313,114 @@ class _CheckOutViewState extends State<CheckOutView> {
     );
   }
 
+  Future<String?> _showExitReasonDialog({
+    required bool willKeluarSementara,
+  }) async {
+    final controller = TextEditingController(text: _reasonController.text);
+    String? errorText;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final scheme = Theme.of(ctx).colorScheme;
+            final semantic = ctx.semantic;
+            final texts = Theme.of(ctx).textTheme;
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: willKeluarSementara
+                          ? semantic.warningContainer
+                          : scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    child: Icon(
+                      Icons.edit_note_rounded,
+                      color: willKeluarSementara
+                          ? semantic.onWarningContainer
+                          : scheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      willKeluarSementara
+                          ? 'Alasan Keluar Sementara'
+                          : 'Alasan Keluar',
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    willKeluarSementara
+                        ? 'Unit memiliki SPK aktif namun FIR belum terbit. Tuliskan alasan keluar sementara.'
+                        : 'Unit belum memiliki SPK & FIR. Tuliskan alasan kendaraan keluar.',
+                    style: texts.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    controller: controller,
+                    label: 'Alasan keluar',
+                    hint:
+                        'Contoh: test drive, ambil dokumen, selesai kunjungan',
+                    required: true,
+                    autofocus: true,
+                    maxLines: 2,
+                    minLines: 2,
+                    errorText: errorText,
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: (_) {
+                      if (errorText != null) {
+                        setDialogState(() => errorText = null);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Batalkan'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final text = controller.text.trim();
+                    if (text.isEmpty) {
+                      setDialogState(
+                        () => errorText = 'Alasan keluar wajib diisi.',
+                      );
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(text);
+                  },
+                  child: Text(
+                    willKeluarSementara
+                        ? 'Catat Keluar Sementara'
+                        : 'Lanjutkan Check-Out',
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
   Future<void> _handleCheckOut() async {
     final rawPlate = _nopolController.text.trim();
     final cleanPlate = normalizePlate(rawPlate);
@@ -350,23 +447,6 @@ class _CheckOutViewState extends State<CheckOutView> {
     final willKeluarSementara = vehicle.willBeKeluarSementaraFor(effLokasiKode);
     final requiresReason = vehicle.requiresExitReasonFor(effLokasiKode);
 
-    final reason = _selectedReasonChip == 'Lainnya'
-        ? _reasonController.text.trim()
-        : (_selectedReasonChip ?? '');
-    if (requiresReason && reason.isEmpty) {
-      setState(
-        () => _reasonError = _selectedReasonChip == 'Lainnya'
-            ? 'Jelaskan alasan keluar.'
-            : 'Pilih atau isi alasan keluar.',
-      );
-      _showSnackBar(
-        willKeluarSementara
-            ? 'FIR belum terbit. Pilih atau isi alasan keluar sementara.'
-            : 'Alasan keluar wajib diisi.',
-      );
-      return;
-    }
-
     if (!PhotoQuadPicker.hasRequiredPhotosFor(_exitPhotos, _fotoSettings)) {
       final requiredLabels = _fotoSettings
           .where((s) => s.isWajib)
@@ -390,11 +470,20 @@ class _CheckOutViewState extends State<CheckOutView> {
       if (confirmed != true) return;
     }
 
+    var reason = '';
+    if (requiresReason) {
+      final inputReason = await _showExitReasonDialog(
+        willKeluarSementara: willKeluarSementara,
+      );
+      if (!mounted || inputReason == null) return;
+      reason = inputReason;
+      _reasonController.text = inputReason;
+    }
+
     setState(() {
       _isSubmitting = true;
       _uploadCurrent = null;
       _uploadTotal = null;
-      _reasonError = null;
       _lokasiError = null;
     });
 
@@ -413,7 +502,7 @@ class _CheckOutViewState extends State<CheckOutView> {
       }
     }
 
-    final petugas = session?.name ?? 'Pos Security KIM 3';
+    final petugas = session?.name ?? 'Pos Security DarkoGate';
     final res = await ApiService.postCheckOut(
       kunjunganId: vehicle.id,
       petugasSecurityKeluar: petugas,
@@ -427,7 +516,6 @@ class _CheckOutViewState extends State<CheckOutView> {
     if (!mounted) return;
 
     if (res['success'] == true) {
-      final nomorMemo = res['nomor_memo'] ?? 'MEMO-KIM3';
       var failedUploads = 0;
       var totalUploads = 0;
 
@@ -463,27 +551,23 @@ class _CheckOutViewState extends State<CheckOutView> {
         _uploadTotal = null;
       });
 
+      final isTempExit =
+          (res['status_kunjungan']?.toString().toUpperCase() ?? '') ==
+              'KELUAR_SEMENTARA' ||
+          vehicle.willBeKeluarSementaraFor(_selectedLokasi?.kodeLokasi);
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => GatePassDialog(
-          nomorTiket: vehicle.nomorTiket ?? 'TKT-KIM3',
+        builder: (_) => CompletionDialog(
+          title: isTempExit ? 'Keluar Sementara Selesai' : 'Check-Out Selesai',
           noPolisi: formatPlate(vehicle.noPolisi),
           namaPengemudi: vehicle.namaPengemudi ?? '-',
-          tipeKunjungan: vehicle.tipeKunjungan ?? 'Service',
-          keluhan: vehicle.keluhan ?? 'Pengecekan armada',
-          waktuMasuk: vehicle.waktuCheckIn != null
-              ? DateFormat('HH:mm').format(vehicle.waktuCheckIn!)
-              : '-',
-          waktuKeluar: DateFormat('HH:mm').format(DateTime.now()),
-          nomorMemo: nomorMemo,
-          invoiceNumber: vehicle.nomorInvoice,
-          spkNumber: vehicle.nomorSpk,
-          petugasSecurity: petugas,
+          isTempExit: isTempExit,
           uploadWarning: failedUploads == 0
               ? null
               : '$failedUploads dari $totalUploads foto gagal diunggah. '
                     'Data check-out tetap tersimpan, tetapi foto keluar belum lengkap.',
+          onGoToBeranda: widget.onGoToBeranda,
         ),
       );
 
@@ -492,8 +576,6 @@ class _CheckOutViewState extends State<CheckOutView> {
         _nopolController.clear();
         _notesController.clear();
         _reasonController.clear();
-        _selectedReasonChip = null;
-        _reasonError = null;
         _selectedVehicle = null;
         _exitPhotos.clear();
         _hasLookedUp = false;
@@ -521,8 +603,6 @@ class _CheckOutViewState extends State<CheckOutView> {
     final effLokasiKode = _selectedLokasi?.kodeLokasi ?? vehicle?.lokasiKode;
     final willKeluarSementara =
         vehicle?.willBeKeluarSementaraFor(effLokasiKode) ?? false;
-    final reasonRequired =
-        vehicle?.requiresExitReasonFor(effLokasiKode) ?? false;
     final requiredPhotoCount = PhotoQuadPicker.requiredUploadedCountFor(
       _exitPhotos,
       _fotoSettings,
@@ -584,6 +664,12 @@ class _CheckOutViewState extends State<CheckOutView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          PlateViewfinder(
+                            plate: _nopolController.text,
+                            onTap: _openAnprScanner,
+                            helperText: 'Ketuk untuk memindai plat nomor',
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
                           PlateInput(
                             controller: _nopolController,
                             onSubmitted: _lookupVehicle,
@@ -704,79 +790,6 @@ class _CheckOutViewState extends State<CheckOutView> {
                     const SizedBox(height: AppSpacing.md),
                     SectionCard(
                       stepNumber: 3,
-                      title: reasonRequired && willKeluarSementara
-                          ? 'Alasan keluar sementara'
-                          : 'Alasan keluar',
-                      subtitle: vehicle == null
-                          ? 'Wajib untuk Keluar Sementara atau kunjungan non-service'
-                          : willKeluarSementara
-                          ? 'FIR belum terbit · wajib pilih atau tulis alasan'
-                          : reasonRequired
-                          ? 'Wajib diisi untuk kunjungan non-service'
-                          : 'Tidak wajib untuk unit ini',
-                      trailing: StatusChip(
-                        reasonRequired
-                            ? AppStatus.inProgress
-                            : AppStatus.neutral,
-                        label: reasonRequired ? 'Wajib' : 'Opsional',
-                        compact: true,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          AppChoiceChips(
-                            options: _reasonOptions,
-                            selectedOption: _selectedReasonChip,
-                            onSelected: (opt) {
-                              setState(() {
-                                _selectedReasonChip = opt;
-                                _reasonError = null;
-                              });
-                            },
-                          ),
-                          AnimatedSize(
-                            duration: AppDurations.normal,
-                            curve: Curves.easeOutCubic,
-                            child: _selectedReasonChip == 'Lainnya'
-                                ? Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: AppSpacing.md,
-                                    ),
-                                    child: AppTextField(
-                                      controller: _reasonController,
-                                      label: 'Jelaskan alasan',
-                                      hint: 'Tuliskan alasan kendaraan keluar',
-                                      required: reasonRequired,
-                                      errorText: _reasonError,
-                                      maxLines: 2,
-                                      minLines: 2,
-                                      textCapitalization:
-                                          TextCapitalization.sentences,
-                                      onChanged: (_) {
-                                        setState(() => _reasonError = null);
-                                      },
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          if (reasonRequired &&
-                              _reasonError != null &&
-                              _selectedReasonChip != 'Lainnya') ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              _reasonError!,
-                              style: texts.bodySmall?.copyWith(
-                                color: scheme.error,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    SectionCard(
-                      stepNumber: 4,
                       title: 'Catatan & Foto keluar',
                       subtitle: totalRequiredPhotos > 0
                           ? 'Foto bertanda * wajib diisi'

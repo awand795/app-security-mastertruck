@@ -275,7 +275,7 @@ class _LoginViewState extends State<LoginView> {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          '© ${DateTime.now().year} DarkoGate · KIM 3',
+          '© ${DateTime.now().year} DarkoGate',
           textAlign: TextAlign.center,
           style: texts.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant.withValues(alpha: 0.8),

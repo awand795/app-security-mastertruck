@@ -79,11 +79,11 @@ class ActiveVehicle {
 
   bool get willBeKeluarSementara => willBeKeluarSementaraFor();
 
-  /// Alasan keluar wajib diisi saat Keluar Sementara di lokasi MT, atau saat bukan Service ber-FIR di lokasi MT.
+  /// Alasan keluar wajib diisi di lokasi MT bila Keluar Sementara (hasWo && !hasFir)
+  /// atau tidak memiliki SPK + FIR (!hasWo || !hasFir). Jika sudah ada SPK & FIR -> false.
   bool requiresExitReasonFor([String? overrideLokasiKode]) {
     if (!isLokasiMt(overrideLokasiKode)) return false;
-    if (willBeKeluarSementaraFor(overrideLokasiKode)) return true;
-    return !isServicePengerjaan || !hasWo || !hasFir;
+    return !(hasWo && hasFir);
   }
 
   bool get requiresExitReason => requiresExitReasonFor();

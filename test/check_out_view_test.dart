@@ -6,6 +6,7 @@ import 'package:bengkel_kim3_security_app/views/check_out_view.dart';
 import 'package:bengkel_kim3_security_app/widgets/app_button.dart';
 import 'package:bengkel_kim3_security_app/widgets/app_text_field.dart';
 import 'package:bengkel_kim3_security_app/widgets/plate_input.dart';
+import 'package:bengkel_kim3_security_app/widgets/plate_viewfinder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -109,8 +110,14 @@ void main() {
 
     expect(find.text('Nomor polisi'), findsOneWidget);
     expect(find.text('Data kendaraan'), findsOneWidget);
-    expect(find.text('Alasan keluar'), findsOneWidget);
     expect(find.text('Catatan & Foto keluar'), findsOneWidget);
+    // Alasan keluar tidak lagi berupa pilihan chip di halaman utama.
+    expect(find.text('Selesai kunjungan'), findsNothing);
+
+    // Kotak pindai plat tampil seperti di check-in, tanpa menyebut OCR.
+    expect(find.byType(PlateViewfinder), findsOneWidget);
+    expect(find.text('Ketuk untuk memindai plat nomor'), findsOneWidget);
+    expect(find.textContaining('OCR'), findsNothing);
 
     // Section 2 memakai placeholder, bukan kosong.
     expect(find.text('Data kendaraan belum dimuat'), findsOneWidget);
@@ -121,14 +128,6 @@ void main() {
       findsOneWidget,
     );
 
-    // Section 3 & 4 tidak lagi menunggu kendaraan ditemukan.
-    expect(find.text('Opsional'), findsOneWidget);
-    expect(
-      find.text('Wajib untuk Keluar Sementara atau kunjungan non-service'),
-      findsOneWidget,
-    );
-    expect(find.text('Selesai kunjungan'), findsOneWidget);
-    expect(find.text('Lainnya'), findsOneWidget);
     expect(find.text('Kosongkan isian'), findsNothing);
     expect(find.text('0/2 wajib'), findsOneWidget);
   });
@@ -145,9 +144,7 @@ void main() {
     expect(find.text('Cari kendaraan terlebih dahulu.'), findsOneWidget);
   });
 
-  testWidgets('mengubah plat tidak menghapus catatan dan alasan terisi', (
-    tester,
-  ) async {
+  testWidgets('mengubah plat tidak menghapus catatan terisi', (tester) async {
     await _pumpCheckOut(tester, [_requiredVehicle]);
 
     await _enterPlate(tester, 'BK 9393 RR');
@@ -157,79 +154,26 @@ void main() {
     await tester.enterText(_notesField, 'Bumper belakang lecet');
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Selesai kunjungan'));
-    await tester.pump();
-    await tester.tap(find.text('Selesai kunjungan'));
-    await tester.pumpAndSettle();
-
-    final selectedChip = tester.widget<ChoiceChip>(
-      find.widgetWithText(ChoiceChip, 'Selesai kunjungan'),
-    );
-    expect(selectedChip.selected, isTrue);
-
-    // Ganti plat -> data kendaraan direset, isian tetap.
+    // Ganti plat -> data kendaraan direset, catatan tetap.
     await _enterPlate(tester, 'BK 1111 AA');
 
     expect(find.text('Bumper belakang lecet'), findsOneWidget);
-    expect(
-      tester
-          .widget<ChoiceChip>(
-            find.widgetWithText(ChoiceChip, 'Selesai kunjungan'),
-          )
-          .selected,
-      isTrue,
-    );
     expect(find.text('Data kendaraan belum dimuat'), findsOneWidget);
   });
 
-  testWidgets(
-    'badge alasan berubah Opsional -> Wajib setelah kendaraan dicari',
-    (tester) async {
-      await _pumpCheckOut(tester, [_requiredVehicle]);
+  test('Aturan popup alasan keluar: MT tanpa SPK+FIR wajib, MT dengan SPK+FIR tidak wajib, non-MT tidak wajib', () {
+    expect(_requiredVehicle.requiresExitReasonFor('MT'), isTrue);
+    expect(_optionalVehicle.requiresExitReasonFor('MT'), isFalse);
+    expect(_requiredVehicle.requiresExitReasonFor('G1'), isFalse);
 
-      expect(find.text('Opsional'), findsOneWidget);
-      expect(find.text('Wajib'), findsNothing);
-
-      await _enterPlate(tester, 'BK 9393 RR');
-      await _tapCariUnit(tester);
-
-      expect(find.text('Opsional'), findsNothing);
-      expect(find.text('Wajib'), findsOneWidget);
-
-      // Unit dengan FIR terbit tetap Opsional walau sudah ditemukan.
-      await _pumpCheckOut(tester, [_optionalVehicle]);
-      await _enterPlate(tester, 'BK 7373 KJS');
-      await _tapCariUnit(tester);
-
-      expect(find.text('Wajib'), findsNothing);
-      expect(find.text('Opsional'), findsOneWidget);
-      expect(find.text('Tidak wajib untuk unit ini'), findsOneWidget);
-    },
-  );
-
-  testWidgets('Lainnya memunculkan field dan validasi wajib saat submit', (
-    tester,
-  ) async {
-    await _pumpCheckOut(tester, [_requiredVehicle]);
-
-    await _enterPlate(tester, 'BK 9393 RR');
-    await _tapCariUnit(tester);
-    expect(find.text('Wajib'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('Lainnya'));
-    await tester.pump();
-    await tester.tap(find.text('Lainnya'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Jelaskan alasan'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(AppButton, 'Catat Keluar Sementara'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Jelaskan alasan keluar.'), findsOneWidget);
-    expect(
-      find.text('FIR belum terbit. Pilih atau isi alasan keluar sementara.'),
-      findsOneWidget,
+    final nonSpk = ActiveVehicle(
+      id: 3,
+      noPolisi: 'BK 2222 BB',
+      lokasiKode: 'MT',
+      hasWo: false,
+      hasFir: false,
     );
+    expect(nonSpk.requiresExitReasonFor('MT'), isTrue);
   });
 
   testWidgets('skeleton tampil selagi data kendaraan dicari', (tester) async {
@@ -263,7 +207,7 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('Wajib'), findsOneWidget);
+    expect(find.text('Catat Keluar Sementara'), findsOneWidget);
   });
 
   testWidgets('layout aman di 360, 390, dan tablet 800 (light & dark)', (

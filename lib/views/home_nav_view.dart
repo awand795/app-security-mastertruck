@@ -8,6 +8,7 @@ import '../models/active_vehicle_model.dart';
 import '../models/booking_candidate_model.dart';
 import '../models/employee_model.dart';
 import '../models/memo_keluar_model.dart';
+import '../models/ms_foto_model.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_widgets.dart';
 import 'active_inside_view.dart';
@@ -29,6 +30,10 @@ class HomeNavView extends StatefulWidget {
     this.initialCheckoutPlate,
     this.activeInsideLoader,
     this.memoLoader,
+    this.photoLoader,
+    this.fotoLoader,
+    this.photosLoader,
+    this.imageLoader,
     this.clock,
   });
 
@@ -42,6 +47,10 @@ class HomeNavView extends StatefulWidget {
   final String? initialCheckoutPlate;
   final Future<List<ActiveVehicle>> Function(String query)? activeInsideLoader;
   final Future<List<MemoKeluar>> Function(String query)? memoLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? photoLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? fotoLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? photosLoader;
+  final Future<List<MsFoto>> Function(int kunjunganId)? imageLoader;
   final DateTime Function()? clock;
 
   @override
@@ -317,6 +326,7 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
           employeeLoader: widget.checkInEmployeeLoader,
           candidateSearcher: widget.checkInCandidateSearcher,
           dockCtaNotifier: _checkInCtaNotifier,
+          onGoToBeranda: () => _selectTab(0),
         );
       case 2:
         return ActiveInsideView(
@@ -334,10 +344,15 @@ class _HomeNavViewState extends State<HomeNavView> with WidgetsBindingObserver {
           dockCtaNotifier: _checkOutCtaNotifier,
           onClearInitialPlate: () =>
               setState(() => _checkoutTargetPlate = null),
+          onGoToBeranda: () => _selectTab(0),
         );
       case 4:
         return TodayExitView(
           memoLoader: widget.memoLoader,
+          photoLoader: widget.photoLoader,
+          fotoLoader: widget.fotoLoader,
+          photosLoader: widget.photosLoader,
+          imageLoader: widget.imageLoader,
           clock: widget.clock,
         );
       case 5:
