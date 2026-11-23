@@ -10,7 +10,9 @@ import '../models/ms_foto_model.dart';
 import '../services/api_service.dart';
 import '../widgets/app_widgets.dart';
 
-/// Riwayat gate pass kendaraan yang sudah keluar hari ini dan kemarin.
+enum _ExitDateFilter { today, yesterday, todayAndYesterday }
+
+/// Riwayat kendaraan yang sudah keluar (filter default Hari ini).
 ///
 /// Pencarian memakai [SearchField] yang di-debounce, daftar dapat ditarik
 /// untuk menyegarkan data, dan setiap item dapat dibuka detailnya beserta
@@ -53,6 +55,7 @@ class _TodayExitViewState extends State<TodayExitView> {
   final _searchController = TextEditingController();
 
   List<MemoKeluar> _memos = const [];
+  _ExitDateFilter _dateFilter = _ExitDateFilter.today;
   String _query = '';
   bool _isLoading = true;
   bool _isSearching = false;
@@ -127,16 +130,24 @@ class _TodayExitViewState extends State<TodayExitView> {
     _loadData(query: '', showSearching: false);
   }
 
+  String get _dateFilterLabel => switch (_dateFilter) {
+    _ExitDateFilter.today => 'Hari ini',
+    _ExitDateFilter.yesterday => 'Kemarin',
+    _ExitDateFilter.todayAndYesterday => 'Hari ini & kemarin',
+  };
+
   List<MemoKeluar> get _filteredMemos {
     final now = widget.clock?.call() ?? DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
-    final list = _memos
-        .where(
-          (m) =>
-              _isSameDay(m.waktuKeluar, now) ||
+    final list = _memos.where((m) {
+      return switch (_dateFilter) {
+        _ExitDateFilter.today => _isSameDay(m.waktuKeluar, now),
+        _ExitDateFilter.yesterday => _isSameDay(m.waktuKeluar, yesterday),
+        _ExitDateFilter.todayAndYesterday =>
+          _isSameDay(m.waktuKeluar, now) ||
               _isSameDay(m.waktuKeluar, yesterday),
-        )
-        .toList();
+      };
+    }).toList();
     list.sort((a, b) {
       final ta = a.waktuKeluar?.millisecondsSinceEpoch ?? 0;
       final tb = b.waktuKeluar?.millisecondsSinceEpoch ?? 0;
@@ -194,32 +205,61 @@ class _TodayExitViewState extends State<TodayExitView> {
                           ),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.calendar_today_rounded,
-                              size: 13,
-                              color: scheme.primary,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Hari ini & kemarin',
-                              style: texts.labelSmall?.copyWith(
+                      PopupMenuButton<_ExitDateFilter>(
+                        initialValue: _dateFilter,
+                        tooltip: 'Pilih rentang hari',
+                        onSelected: (value) {
+                          if (_dateFilter != value) {
+                            setState(() => _dateFilter = value);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _ExitDateFilter.today,
+                            child: Text('Hari ini'),
+                          ),
+                          PopupMenuItem(
+                            value: _ExitDateFilter.yesterday,
+                            child: Text('Kemarin'),
+                          ),
+                          PopupMenuItem(
+                            value: _ExitDateFilter.todayAndYesterday,
+                            child: Text('Hari ini & kemarin'),
+                          ),
+                        ],
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.calendar_today_rounded,
+                                size: 13,
                                 color: scheme.primary,
-                                fontWeight: FontWeight.w700,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 5),
+                              Text(
+                                _dateFilterLabel,
+                                style: texts.labelSmall?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 16,
+                                color: scheme.primary,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
