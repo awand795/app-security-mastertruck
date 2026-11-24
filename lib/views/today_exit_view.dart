@@ -547,6 +547,15 @@ class _MemoDetailDialogState extends State<_MemoDetailDialog> {
     }
   }
 
+  List<MsFoto> _photosByEvent(String event) => _photos
+      .where((p) => p.jenisEvent.trim().toUpperCase() == event)
+      .toList();
+
+  List<MsFoto> _otherPhotos() => _photos.where((p) {
+    final ev = p.jenisEvent.trim().toUpperCase();
+    return ev != 'MASUK' && ev != 'KELUAR';
+  }).toList();
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -660,23 +669,28 @@ class _MemoDetailDialogState extends State<_MemoDetailDialog> {
                           ),
                         ),
                       )
-                    else
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: AppSpacing.xs,
-                              crossAxisSpacing: AppSpacing.xs,
-                              childAspectRatio: 4 / 3,
-                            ),
-                        itemCount: _photos.length,
-                        itemBuilder: (context, index) {
-                          final photo = _photos[index];
-                          return _PhotoTile(photo: photo);
-                        },
-                      ),
+                    else ...[
+                      if (_photosByEvent('MASUK').isNotEmpty)
+                        _PhotoSection(
+                          title: 'Foto Masuk (${_photosByEvent('MASUK').length})',
+                          photos: _photosByEvent('MASUK'),
+                        ),
+                      if (_photosByEvent('KELUAR').isNotEmpty) ...[
+                        if (_photosByEvent('MASUK').isNotEmpty)
+                          const SizedBox(height: AppSpacing.md),
+                        _PhotoSection(
+                          title: 'Foto Keluar (${_photosByEvent('KELUAR').length})',
+                          photos: _photosByEvent('KELUAR'),
+                        ),
+                      ],
+                      if (_otherPhotos().isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _PhotoSection(
+                          title: 'Foto Lainnya (${_otherPhotos().length})',
+                          photos: _otherPhotos(),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
               ),
@@ -748,6 +762,44 @@ class _DetailRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PhotoSection extends StatelessWidget {
+  const _PhotoSection({required this.title, required this.photos});
+
+  final String title;
+  final List<MsFoto> photos;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final texts = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: texts.labelMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: AppSpacing.xs,
+            crossAxisSpacing: AppSpacing.xs,
+            childAspectRatio: 4 / 3,
+          ),
+          itemCount: photos.length,
+          itemBuilder: (context, index) => _PhotoTile(photo: photos[index]),
+        ),
+      ],
     );
   }
 }
