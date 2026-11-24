@@ -1,11 +1,11 @@
 {
-    "name": "bengkel_kim3_security_app",
-    "short_name": "bengkel_kim3_security_app",
+    "name": "DarkoGate",
+    "short_name": "DarkoGate",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F4F7FF",
+    "theme_color": "#0F1B3D",
+    "description": "Aplikasi Pos Security Gerbang DarkoGate",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
