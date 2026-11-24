@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -7,11 +9,13 @@ import '../models/lokasi_model.dart';
 import '../models/set_foto_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/draft_service.dart';
 import '../services/location_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/completion_dialog.dart';
+import '../widgets/draft_banner.dart';
 import '../widgets/photo_quad_picker.dart';
 
 class CheckOutView extends StatefulWidget {
@@ -62,6 +66,11 @@ class _CheckOutViewState extends State<CheckOutView> {
   int? _uploadCurrent;
   int? _uploadTotal;
 
+  Timer? _draftDebounce;
+  bool _isRestoringDraft = false;
+  bool _hasDraft = false;
+  String? _pendingLokasiKode;
+
   static const _fallbackLokasi = [
     LokasiItem(id: 1, kodeLokasi: 'MT', namaLokasi: 'Bengkel'),
     LokasiItem(id: 2, kodeLokasi: 'G1', namaLokasi: 'Gudang 1'),
@@ -71,11 +80,69 @@ class _CheckOutViewState extends State<CheckOutView> {
   @override
   void initState() {
     super.initState();
+    for (final c in [_nopolController, _notesController, _reasonController]) {
+      c.addListener(_scheduleDraftSave);
+    }
     _loadLokasi();
     _loadSetFoto();
     if (widget.initialPlate != null && widget.initialPlate!.isNotEmpty) {
       _nopolController.text = formatPlate(widget.initialPlate!);
       _lookupVehicle(widget.initialPlate!);
+    } else {
+      _restoreDraft();
+    }
+  }
+
+  void _scheduleDraftSave() {
+    if (_isRestoringDraft) return;
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 350), _saveDraftNow);
+  }
+
+  Future<void> _saveDraftNow() async {
+    if (_isRestoringDraft || !mounted) return;
+    final draft = CheckOutDraft(
+      nopol: _nopolController.text,
+      notes: _notesController.text,
+      reason: _reasonController.text,
+      lokasiKode: _selectedLokasi?.kodeLokasi,
+      selectedVehicle: _selectedVehicle,
+      photos: Map<String, String>.from(_exitPhotos),
+    );
+    final hasAny = !draft.isEmpty;
+    if (mounted && _hasDraft != hasAny) {
+      setState(() => _hasDraft = hasAny);
+    }
+    await DraftService.saveCheckOutDraft(draft);
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await DraftService.loadCheckOutDraft();
+    if (draft == null || !mounted) return;
+
+    _isRestoringDraft = true;
+    try {
+      setState(() {
+        _nopolController.text = draft.nopol;
+        _notesController.text = draft.notes;
+        _reasonController.text = draft.reason;
+        _selectedVehicle = draft.selectedVehicle;
+        _hasLookedUp = draft.selectedVehicle != null;
+        _exitPhotos
+          ..clear()
+          ..addAll(draft.photos);
+        _hasDraft = true;
+
+        _pendingLokasiKode = draft.lokasiKode;
+        if (draft.lokasiKode != null && _lokasiList.isNotEmpty) {
+          _selectedLokasi = _lokasiList.firstWhere(
+            (e) => e.kodeLokasi == draft.lokasiKode,
+            orElse: () => _selectedLokasi ?? _lokasiList.first,
+          );
+        }
+      });
+    } finally {
+      _isRestoringDraft = false;
     }
   }
 
@@ -98,10 +165,20 @@ class _CheckOutViewState extends State<CheckOutView> {
       final items = list.isNotEmpty ? list : _fallbackLokasi;
       setState(() {
         _lokasiList = items;
-        _selectedLokasi ??= items.firstWhere(
-          (e) => e.isBengkelMt,
-          orElse: () => items.first,
-        );
+        if (_pendingLokasiKode != null) {
+          _selectedLokasi = items.firstWhere(
+            (e) => e.kodeLokasi == _pendingLokasiKode,
+            orElse: () => items.firstWhere(
+              (e) => e.isBengkelMt,
+              orElse: () => items.first,
+            ),
+          );
+        } else {
+          _selectedLokasi ??= items.firstWhere(
+            (e) => e.isBengkelMt,
+            orElse: () => items.first,
+          );
+        }
         _isLoadingLokasi = false;
       });
     } catch (_) {
@@ -116,6 +193,7 @@ class _CheckOutViewState extends State<CheckOutView> {
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
     _nopolController.dispose();
     _notesController.dispose();
     _reasonController.dispose();
@@ -572,14 +650,7 @@ class _CheckOutViewState extends State<CheckOutView> {
       );
 
       if (!mounted) return;
-      setState(() {
-        _nopolController.clear();
-        _notesController.clear();
-        _reasonController.clear();
-        _selectedVehicle = null;
-        _exitPhotos.clear();
-        _hasLookedUp = false;
-      });
+      _resetForm();
       widget.onClearInitialPlate?.call();
     } else {
       setState(() {
@@ -589,6 +660,29 @@ class _CheckOutViewState extends State<CheckOutView> {
       });
       _showSnackBar(res['message'] ?? 'Gagal check-out.');
     }
+  }
+
+  void _resetForm() {
+    if (!mounted) return;
+    _draftDebounce?.cancel();
+    _isRestoringDraft = true;
+    try {
+      setState(() {
+        _nopolController.clear();
+        _notesController.clear();
+        _reasonController.clear();
+        _selectedVehicle = null;
+        _exitPhotos.clear();
+        _hasLookedUp = false;
+        _plateError = null;
+        _lokasiError = null;
+        _hasDraft = false;
+        _pendingLokasiKode = null;
+      });
+    } finally {
+      _isRestoringDraft = false;
+    }
+    DraftService.clearCheckOutDraft();
   }
 
   void _showSnackBar(String msg) {
@@ -646,6 +740,7 @@ class _CheckOutViewState extends State<CheckOutView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_hasDraft) DraftBanner(onReset: _resetForm),
                     SectionCard(
                       stepNumber: 1,
                       title: 'Nomor polisi',
@@ -726,6 +821,7 @@ class _CheckOutViewState extends State<CheckOutView> {
                                 _selectedLokasi = loc;
                                 _lokasiError = null;
                               });
+                              _saveDraftNow();
                             },
                           ),
                           if (_hasLookedUp && vehicle == null) ...[
@@ -826,9 +922,11 @@ class _CheckOutViewState extends State<CheckOutView> {
                             uploadTotal: _uploadTotal,
                             onPhotoCaptured: (angle, base64) {
                               setState(() => _exitPhotos[angle] = base64);
+                              _saveDraftNow();
                             },
                             onPhotoRemoved: (angle) {
                               setState(() => _exitPhotos.remove(angle));
+                              _saveDraftNow();
                             },
                           ),
                           if (_hasInput) ...[

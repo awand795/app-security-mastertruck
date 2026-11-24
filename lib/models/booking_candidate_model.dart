@@ -154,4 +154,35 @@ class CheckinCandidate {
     }
     return 'Service';
   }
+
+  Map<String, dynamic> toJson() => {
+    'source': source,
+    'booking_id': bookingId,
+    'no_booking': noBooking,
+    'no_polisi': noPolisi,
+    'no_polisi_clean': noPolisiClean,
+    'customer_name': customerName,
+    'customer_telepon': customerTelepon,
+    'jenis_layanan': jenisLayanan,
+    'keluhan': keluhan,
+    'catatan': catatan,
+    'tanggal_booking': tanggalBooking,
+    'jam_booking': jamBooking,
+    'status_booking': statusBooking,
+    'is_confirmed': isConfirmed,
+    'can_checkin': canCheckin,
+    'is_within_window': isWithinWindow,
+    'is_stale_unconfirmed': isStaleUnconfirmed,
+    'unit_id': unitId,
+    'member_id': memberId,
+    'nama_perusahaan': namaPerusahaan,
+    'nama_pengguna_fleet': namaPenggunaFleet,
+    'nama_pic': namaPic,
+    'unit_telepon': unitTelepon,
+    'jenis_armada': jenisArmada,
+    'merk': merk,
+    'model': model,
+    'tahun': tahun,
+    'has_active_booking': hasActiveBooking,
+  };
 }

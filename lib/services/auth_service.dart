@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
 import '../models/gate_model.dart';
+import 'draft_service.dart';
 
 class UserSession {
   final String userId;
@@ -284,5 +285,6 @@ class AuthService {
     _currentSession = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionKey);
+    await DraftService.clearAllDrafts();
   }
 }

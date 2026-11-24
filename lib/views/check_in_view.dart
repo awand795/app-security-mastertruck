@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../config/theme.dart';
@@ -8,11 +10,13 @@ import '../models/set_foto_model.dart';
 import '../models/tujuan_kedatangan_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/draft_service.dart';
 import '../services/location_service.dart';
 import '../utils/plate_utils.dart';
 import '../widgets/anpr_scanner_sheet.dart';
 import '../widgets/app_widgets.dart';
 import '../widgets/completion_dialog.dart';
+import '../widgets/draft_banner.dart';
 import '../widgets/photo_quad_picker.dart';
 
 class CheckInView extends StatefulWidget {
@@ -87,6 +91,13 @@ class _CheckInViewState extends State<CheckInView> {
   String? _phoneError;
   String? _picError;
 
+  Timer? _draftDebounce;
+  bool _isRestoringDraft = false;
+  bool _hasDraft = false;
+  String? _pendingLokasiKode;
+  String? _pendingTujuanKode;
+  String? _pendingEmployeeId;
+
   static const _fallbackLokasi = [
     LokasiItem(id: 1, kodeLokasi: 'MT', namaLokasi: 'Bengkel'),
     LokasiItem(id: 2, kodeLokasi: 'G1', namaLokasi: 'Gudang 1'),
@@ -117,6 +128,18 @@ class _CheckInViewState extends State<CheckInView> {
   @override
   void initState() {
     super.initState();
+    for (final c in [
+      _nopolController,
+      _driverNameController,
+      _driverPhoneController,
+      _complaintController,
+      _notesController,
+      _customTipeController,
+      _picController,
+    ]) {
+      c.addListener(_scheduleDraftSave);
+    }
+    _restoreDraft();
     _loadEmployees();
     _loadLokasi();
     _loadTujuanKedatangan();
@@ -125,6 +148,7 @@ class _CheckInViewState extends State<CheckInView> {
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
     _nopolController.dispose();
     _driverNameController.dispose();
     _driverPhoneController.dispose();
@@ -135,6 +159,93 @@ class _CheckInViewState extends State<CheckInView> {
     super.dispose();
   }
 
+  void _scheduleDraftSave() {
+    if (_isRestoringDraft) return;
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 350), _saveDraftNow);
+  }
+
+  Future<void> _saveDraftNow() async {
+    if (_isRestoringDraft || !mounted) return;
+    final draft = CheckInDraft(
+      nopol: _nopolController.text,
+      driverName: _driverNameController.text,
+      driverPhone: _driverPhoneController.text,
+      complaint: _complaintController.text,
+      notes: _notesController.text,
+      customTipe: _customTipeController.text,
+      picText: _picController.text,
+      jenisKedatangan: _jenisKedatangan,
+      bookingId: _bookingId,
+      lokasiKode: _selectedLokasi?.kodeLokasi,
+      tujuanKode: _selectedTujuan?.kodeTujuan,
+      selectedPic: _selectedPic,
+      selectedEmployeeId: _selectedEmployee?.id?.toString(),
+      selectedCandidate: _selectedCandidate,
+      photos: Map<String, String>.from(_photos),
+    );
+    final hasAny = !draft.isEmpty;
+    if (mounted && _hasDraft != hasAny) {
+      setState(() => _hasDraft = hasAny);
+    }
+    await DraftService.saveCheckInDraft(draft);
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await DraftService.loadCheckInDraft();
+    if (draft == null || !mounted) return;
+
+    _isRestoringDraft = true;
+    try {
+      setState(() {
+        _nopolController.text = draft.nopol;
+        _driverNameController.text = draft.driverName;
+        _driverPhoneController.text = draft.driverPhone;
+        _complaintController.text = draft.complaint;
+        _notesController.text = draft.notes;
+        _customTipeController.text = draft.customTipe;
+        _picController.text = draft.picText;
+        _jenisKedatangan = draft.jenisKedatangan;
+        _bookingId = draft.bookingId;
+        _selectedPic = draft.selectedPic;
+        _selectedCandidate = draft.selectedCandidate;
+        _hasSearchedPlate = draft.selectedCandidate != null;
+        _photos
+          ..clear()
+          ..addAll(draft.photos);
+        _hasDraft = true;
+
+        _pendingLokasiKode = draft.lokasiKode;
+        if (draft.lokasiKode != null && _lokasiList.isNotEmpty) {
+          _selectedLokasi = _lokasiList.firstWhere(
+            (e) => e.kodeLokasi == draft.lokasiKode,
+            orElse: () => _selectedLokasi ?? _lokasiList.first,
+          );
+        }
+
+        _pendingTujuanKode = draft.tujuanKode;
+        if (draft.tujuanKode != null && _tujuanList.isNotEmpty) {
+          _selectedTujuan = _tujuanList.firstWhere(
+            (e) => e.kodeTujuan == draft.tujuanKode,
+            orElse: () => _selectedTujuan ?? _tujuanList.first,
+          );
+        }
+
+        _pendingEmployeeId = draft.selectedEmployeeId;
+        if (draft.selectedEmployeeId != null && _employeeList.isNotEmpty) {
+          for (final emp in _employeeList) {
+            if (emp.id?.toString() == draft.selectedEmployeeId) {
+              _selectedEmployee = emp;
+              break;
+            }
+          }
+        }
+      });
+    } finally {
+      _isRestoringDraft = false;
+    }
+  }
+
   Future<void> _loadEmployees() async {
     try {
       final loader = widget.employeeLoader ?? ApiService.getEmployees;
@@ -142,6 +253,14 @@ class _CheckInViewState extends State<CheckInView> {
       if (!mounted) return;
       setState(() {
         _employeeList = list;
+        if (_pendingEmployeeId != null) {
+          for (final emp in list) {
+            if (emp.id?.toString() == _pendingEmployeeId) {
+              _selectedEmployee = emp;
+              break;
+            }
+          }
+        }
         _isLoadingEmployees = false;
       });
     } catch (_) {
@@ -158,17 +277,27 @@ class _CheckInViewState extends State<CheckInView> {
       final items = list.isNotEmpty ? list : _fallbackLokasi;
       setState(() {
         _lokasiList = items;
-        _selectedLokasi = items.firstWhere(
-          (e) => e.isBengkelMt,
-          orElse: () => items.first,
-        );
+        if (_pendingLokasiKode != null) {
+          _selectedLokasi = items.firstWhere(
+            (e) => e.kodeLokasi == _pendingLokasiKode,
+            orElse: () => items.firstWhere(
+              (e) => e.isBengkelMt,
+              orElse: () => items.first,
+            ),
+          );
+        } else {
+          _selectedLokasi ??= items.firstWhere(
+            (e) => e.isBengkelMt,
+            orElse: () => items.first,
+          );
+        }
         _isLoadingLokasi = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _lokasiList = _fallbackLokasi;
-        _selectedLokasi = _fallbackLokasi.first;
+        _selectedLokasi ??= _fallbackLokasi.first;
         _isLoadingLokasi = false;
       });
     }
@@ -182,7 +311,12 @@ class _CheckInViewState extends State<CheckInView> {
       final items = list.isNotEmpty ? list : _fallbackTujuan;
       setState(() {
         _tujuanList = items;
-        if (_selectedTujuan == null && items.isNotEmpty) {
+        if (_pendingTujuanKode != null) {
+          _selectedTujuan = items.firstWhere(
+            (e) => e.kodeTujuan == _pendingTujuanKode,
+            orElse: () => items.first,
+          );
+        } else if (_selectedTujuan == null && items.isNotEmpty) {
           _selectedTujuan = items.first;
         }
         _isLoadingTujuan = false;
@@ -652,33 +786,44 @@ class _CheckInViewState extends State<CheckInView> {
 
   void _resetForm() {
     if (!mounted) return;
-    setState(() {
-      _nopolController.clear();
-      _driverNameController.clear();
-      _driverPhoneController.clear();
-      _complaintController.clear();
-      _notesController.clear();
-      _customTipeController.clear();
-      _picController.clear();
-      _jenisKedatangan = 'WALK_IN';
-      _bookingId = null;
-      _selectedCandidate = null;
-      _selectedPic = null;
-      _selectedEmployee = null;
-      _selectedTujuan = _tujuanList.isNotEmpty ? _tujuanList.first : null;
-      _hasSearchedPlate = false;
-      _candidates.clear();
-      _photos.clear();
-      _isSubmitting = false;
-      _uploadCurrent = null;
-      _uploadTotal = null;
-      _plateError = null;
-      _lokasiError = null;
-      _tujuanError = null;
-      _driverError = null;
-      _phoneError = null;
-      _picError = null;
-    });
+    _draftDebounce?.cancel();
+    _isRestoringDraft = true;
+    try {
+      setState(() {
+        _nopolController.clear();
+        _driverNameController.clear();
+        _driverPhoneController.clear();
+        _complaintController.clear();
+        _notesController.clear();
+        _customTipeController.clear();
+        _picController.clear();
+        _jenisKedatangan = 'WALK_IN';
+        _bookingId = null;
+        _selectedCandidate = null;
+        _selectedPic = null;
+        _selectedEmployee = null;
+        _selectedTujuan = _tujuanList.isNotEmpty ? _tujuanList.first : null;
+        _hasSearchedPlate = false;
+        _candidates.clear();
+        _photos.clear();
+        _isSubmitting = false;
+        _uploadCurrent = null;
+        _uploadTotal = null;
+        _plateError = null;
+        _lokasiError = null;
+        _tujuanError = null;
+        _driverError = null;
+        _phoneError = null;
+        _picError = null;
+        _hasDraft = false;
+        _pendingLokasiKode = null;
+        _pendingTujuanKode = null;
+        _pendingEmployeeId = null;
+      });
+    } finally {
+      _isRestoringDraft = false;
+    }
+    DraftService.clearCheckInDraft();
   }
 
   void _showSnackBar(String msg) {
@@ -734,6 +879,7 @@ class _CheckInViewState extends State<CheckInView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_hasDraft) DraftBanner(onReset: _resetForm),
                     SectionCard(
                       stepNumber: 1,
                       title: 'Nomor polisi',
@@ -809,6 +955,7 @@ class _CheckInViewState extends State<CheckInView> {
                                 _selectedLokasi = loc;
                                 _lokasiError = null;
                               });
+                              _saveDraftNow();
                             },
                           ),
                           if (_hasSearchedPlate) ...[
@@ -861,6 +1008,7 @@ class _CheckInViewState extends State<CheckInView> {
                                       _tujuanError = null;
                                       _picError = null;
                                     });
+                                    _saveDraftNow();
                                   },
                                 );
                               }).toList(),
@@ -997,9 +1145,11 @@ class _CheckInViewState extends State<CheckInView> {
                         uploadTotal: _uploadTotal,
                         onPhotoCaptured: (angle, base64) {
                           setState(() => _photos[angle] = base64);
+                          _saveDraftNow();
                         },
                         onPhotoRemoved: (angle) {
                           setState(() => _photos.remove(angle));
+                          _saveDraftNow();
                         },
                       ),
                     ),

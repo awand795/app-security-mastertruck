@@ -831,13 +831,17 @@ ImageProvider? _imageProvider(String raw) {
       return null;
     }
   } else {
-    // Deteksi hex bytea (Postgres) sederhana.
-    final head = trimmed.substring(0, trimmed.length.clamp(0, 16));
-    if (RegExp(r'^[0-9a-fA-F]+$').hasMatch(head) && trimmed.length.isEven) {
+    // Deteksi hex bytea (Postgres), termasuk yang berawalan \x atau 0x.
+    var hexStr = trimmed;
+    if (hexStr.startsWith(r'\x') || hexStr.startsWith('0x') || hexStr.startsWith('0X')) {
+      hexStr = hexStr.substring(2);
+    }
+    final head = hexStr.substring(0, hexStr.length.clamp(0, 16));
+    if (head.isNotEmpty && RegExp(r'^[0-9a-fA-F]+$').hasMatch(head) && hexStr.length.isEven) {
       try {
         final bytes = <int>[];
-        for (var i = 0; i < trimmed.length; i += 2) {
-          bytes.add(int.parse(trimmed.substring(i, i + 2), radix: 16));
+        for (var i = 0; i < hexStr.length; i += 2) {
+          bytes.add(int.parse(hexStr.substring(i, i + 2), radix: 16));
         }
         return MemoryImage(Uint8List.fromList(bytes));
       } catch (_) {

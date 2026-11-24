@@ -158,4 +158,37 @@ class ActiveVehicle {
           json['customer_name']?.toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'nomor_tiket': nomorTiket,
+    'no_polisi': noPolisi,
+    'nama_pengemudi': namaPengemudi,
+    'no_telepon_pengemudi': noTeleponPengemudi,
+    'pic_tujuan': picTujuan,
+    'tipe_kunjungan': tipeKunjungan,
+    'sub_tujuan': subTujuan,
+    'status_kunjungan': statusKunjungan,
+    'alasan_keluar': alasanKeluar,
+    'gate_masuk_id': gateMasukId,
+    'gate_masuk_nama': gateMasukNama,
+    'gate_keluar_id': gateKeluarId,
+    'gate_keluar_nama': gateKeluarNama,
+    'lokasi_kode': lokasiKode,
+    'lokasi_nama': lokasiNama,
+    'checkin2': checkin2?.toIso8601String(),
+    'checkout2': checkout2?.toIso8601String(),
+    'has_wo': hasWo,
+    'has_fir': hasFir,
+    'keluhan': keluhan,
+    'status_servis': statusServis,
+    'status_invoice': statusInvoice,
+    'no_spk': nomorSpk,
+    'nomor_invoice': nomorInvoice,
+    'waktu_check_in': waktuCheckIn?.toIso8601String(),
+    'waktu_check_out': waktuCheckOut?.toIso8601String(),
+    'petugas_security_masuk': petugasSecurity,
+    'jenis_kedatangan': jenisKedatangan,
+    'nama_pelanggan': namaPelanggan,
+  };
 }
