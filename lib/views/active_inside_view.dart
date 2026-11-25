@@ -399,12 +399,18 @@ class _ActiveVehicleCard extends StatelessWidget {
     final duration = _formatDuration(vehicle.waktuCheckIn, now);
     final statusLabel = isTempOut
         ? 'Keluar Sementara'
-        : (vehicle.isServicePengerjaan && vehicle.hasWo
+        : (vehicle.hasWo
               ? (vehicle.hasFir ? 'FIR Siap' : 'Belum FIR')
-              : (vehicle.subTujuan ?? vehicle.tipeKunjungan ?? 'Di Bengkel'));
+              : (vehicle.hasSpk
+                    ? 'Sedang Service'
+                    : (vehicle.subTujuan ??
+                          vehicle.tipeKunjungan ??
+                          'Di Bengkel')));
 
     return AppCard(
-      accentColor: ready ? semantic.success : semantic.warning,
+      accentColor: (ready && !(vehicle.hasSpk && !vehicle.hasFir))
+          ? semantic.success
+          : semantic.warning,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
         AppSpacing.sm,

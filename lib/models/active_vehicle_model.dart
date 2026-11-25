@@ -66,6 +66,10 @@ class ActiveVehicle {
   bool get isKeluarSementara =>
       statusKunjungan.toUpperCase() == 'KELUAR_SEMENTARA';
 
+  bool get hasSpk => (nomorSpk?.trim().isNotEmpty ?? false);
+
+  bool get isSedangService => hasWo || hasSpk;
+
   bool get isServicePengerjaan =>
       (subTujuan ?? tipeKunjungan ?? '').toUpperCase() == 'SERVICE';
 

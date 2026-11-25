@@ -113,10 +113,20 @@ class _BerandaViewState extends State<BerandaView> {
     final active = _data?.active ?? const <ActiveVehicle>[];
     final insideCount = active.where((v) => !v.isKeluarSementara).length;
     final readyCount = active
-        .where((v) => !v.isKeluarSementara && v.isSiapKeluar)
+        .where(
+          (v) =>
+              !v.isKeluarSementara &&
+              v.isSiapKeluar &&
+              !(v.hasSpk && !v.hasFir),
+        )
         .length;
     final progressCount = active
-        .where((v) => v.isKeluarSementara || !v.isSiapKeluar)
+        .where(
+          (v) =>
+              v.isKeluarSementara ||
+              !v.isSiapKeluar ||
+              (v.hasSpk && !v.hasFir),
+        )
         .length;
     final exitedToday =
         _data?.exited
