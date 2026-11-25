@@ -399,12 +399,16 @@ class _MemoCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
-              const Flexible(
+              Flexible(
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: StatusChip(
-                    AppStatus.info,
-                    label: 'Keluar',
+                    memo.isKeluarSementara
+                        ? AppStatus.inProgress
+                        : AppStatus.info,
+                    label: memo.isKeluarSementara
+                        ? 'Keluar sementara'
+                        : 'Keluar',
                     icon: Icons.exit_to_app_rounded,
                     compact: true,
                   ),
